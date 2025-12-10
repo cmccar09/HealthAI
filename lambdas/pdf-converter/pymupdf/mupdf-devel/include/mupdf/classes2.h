@@ -281,7 +281,7 @@ namespace mupdf
 	FZ_FUNCTION int fz_authenticate_password(const FzDocument& doc, const char *password);
 
 	/** Class-aware wrapper for `::fz_autowarp_pixmap()`.  */
-	FZ_FUNCTION FzPixmap fz_autowarp_pixmap(const FzPixmap& src, const FzQuad& points);
+	FZ_FUNCTION FzPixmap fz_autowarp_pixmap(const FzPixmap& src, const ::fz_point points[4]);
 
 	/** Class-aware wrapper for `::fz_available()`.  */
 	/**
@@ -359,9 +359,6 @@ namespace mupdf
 
 	/** Class-aware wrapper for `::fz_begin_tile_id()`.  */
 	FZ_FUNCTION int fz_begin_tile_id(const FzDevice& dev, const FzRect& area, const FzRect& view, float xstep, float ystep, const FzMatrix& ctm, int id);
-
-	/** Class-aware wrapper for `::fz_begin_tile_tid()`.  */
-	FZ_FUNCTION int fz_begin_tile_tid(const FzDevice& dev, const FzRect& area, const FzRect& view, float xstep, float ystep, const FzMatrix& ctm, int id, int doc_id);
 
 	/** Class-aware wrapper for `::fz_bidi_fragment_text()`.
 	
@@ -663,9 +660,6 @@ namespace mupdf
 
 	/** Class-aware wrapper for `::fz_clampp()`.  */
 	FZ_FUNCTION void *fz_clampp(void *x, void *min, void *max);
-
-	/** Class-aware wrapper for `::fz_classify_stext_rect()`.  */
-	FZ_FUNCTION void fz_classify_stext_rect(const FzStextPage& page, ::fz_structure classification, const FzRect& rect);
 
 	/** Class-aware wrapper for `::fz_cleanname()`.  */
 	/**
@@ -1004,7 +998,7 @@ namespace mupdf
 		Creates a stream assuming the default PDF parameters,
 		except the number of columns.
 	*/
-	FZ_FUNCTION FzBuffer fz_compress_ccitt_fax_g3(const unsigned char *data, int columns, int rows, ptrdiff_t stride);
+	FZ_FUNCTION FzBuffer fz_compress_ccitt_fax_g3(const unsigned char *data, int columns, int rows, int stride);
 
 	/** Class-aware wrapper for `::fz_compress_ccitt_fax_g4()`.  */
 	/**
@@ -1012,7 +1006,7 @@ namespace mupdf
 		Creates a stream assuming the default PDF parameters, except
 		K=-1 and the number of columns.
 	*/
-	FZ_FUNCTION FzBuffer fz_compress_ccitt_fax_g4(const unsigned char *data, int columns, int rows, ptrdiff_t stride);
+	FZ_FUNCTION FzBuffer fz_compress_ccitt_fax_g4(const unsigned char *data, int columns, int rows, int stride);
 
 	/** Class-aware wrapper for `::fz_compressed_buffer_size()`.  */
 	/**
@@ -1538,7 +1532,7 @@ namespace mupdf
 	FZ_FUNCTION void fz_detach_xml(const FzXml& node);
 
 	/** Class-aware wrapper for `::fz_detect_document()`.  */
-	FZ_FUNCTION int fz_detect_document(FzQuad& points, const FzPixmap& src);
+	FZ_FUNCTION int fz_detect_document(FzPoint& points, const FzPixmap& src);
 
 	/** Class-aware wrapper for `::fz_detect_skew()`.  */
 	FZ_FUNCTION double fz_detect_skew(const FzPixmap& pixmap);
@@ -2958,9 +2952,6 @@ namespace mupdf
 		Assumes that the stream object is seekable.
 	*/
 	FZ_FUNCTION int fz_is_libarchive_archive(const FzStream& file);
-
-	/** Class-aware wrapper for `::fz_is_lossy_image()`.  */
-	FZ_FUNCTION int fz_is_lossy_image(const FzImage& image);
 
 	/** Class-aware wrapper for `::fz_is_page_range()`.  */
 	/**
@@ -5118,10 +5109,6 @@ namespace mupdf
 	is not available because returned wrapper class for `fz_pool`
 	is non-copyable. */
 
-	/* Class-aware wrapper for `fz_new_pool_array_imp()`
-	is not available because returned wrapper class for `fz_pool_array`
-	is non-copyable. */
-
 	/* Class-aware wrapper for `fz_new_ppm_pixmap_writer()`
 	is not available because returned wrapper class for `fz_document_writer`
 	is non-copyable. */
@@ -5182,41 +5169,6 @@ namespace mupdf
 	*/
 	FZ_FUNCTION FzDevice fz_new_stext_device(const FzStextPage& page, FzStextOptions& options);
 
-	/** Class-aware wrapper for `::fz_new_stext_device_for_page()`.  */
-	/**
-		Create a device to extract the text on a page into an existing
-		fz_stext_page structure.
-	
-		Gather the text on a page into blocks and lines.
-	
-		The reading order is taken from the order the text is drawn in
-		the source file, so may not be accurate.
-	
-		stext_page: The text page to which content should be added. This will
-		usually be a newly created (empty) text page, but it can be one
-		containing data already (for example when merging multiple
-		pages, or watermarking).
-	
-		options: Options to configure the stext device.
-	
-		The next 2 parameters are copied into the fz_stext_page structure's
-		ids section, so only have to be valid if you expect to interrogate
-		that section later.
-	
-		chapter_num: The chapter number that this page came from.
-	
-		page_num: The page number that this page came from.
-	
-		The final parameter is copied into the fz_stext_page structure's
-		ids section. The mediabox for the enture fz_stext_page is unioned
-		with this, so pass fz_empty_bbox if you don't care about getting
-		a valid value back from the ids section, but you don't want to
-		upset the value in the page->mediabox field.
-	
-		mediabox: The mediabox for this page.
-	*/
-	FZ_FUNCTION FzDevice fz_new_stext_device_for_page(const FzStextPage& stext_page, FzStextOptions& opts, int chapter_num, int page_num, const FzRect& mediabox);
-
 	/* Class-aware wrapper for `fz_new_stext_page()`
 	is not available because returned wrapper class for `fz_stext_page`
 	is non-copyable. */
@@ -5236,9 +5188,6 @@ namespace mupdf
 	/* Class-aware wrapper for `fz_new_stext_page_from_page_number()`
 	is not available because returned wrapper class for `fz_stext_page`
 	is non-copyable. */
-
-	/** Class-aware wrapper for `::fz_new_stext_struct()`.  */
-	FZ_FUNCTION FzStextBlock fz_new_stext_struct(const FzStextPage& page, ::fz_structure standard, const char *raw, int index);
 
 	/** Class-aware wrapper for `::fz_new_store_context()`.  */
 	/**
@@ -6027,13 +5976,6 @@ namespace mupdf
 	*/
 	FZ_FUNCTION int fz_option_eq(const char *a, const char *b);
 
-	/** Class-aware wrapper for `::fz_optpath()`.  */
-	/**
-		Convert "-" to "/dev/stdout" for use with command lines.
-		Also converts "nul" and "con" on Windows.
-	*/
-	FZ_FUNCTION char *fz_optpath(char *opt);
-
 	/** Class-aware wrapper for `::fz_outline_glyph()`.  */
 	/**
 		Look a glyph up from a font, and return the outline of the
@@ -6101,15 +6043,6 @@ namespace mupdf
 		Pretty-print an XML tree to given output.
 	*/
 	FZ_FUNCTION void fz_output_xml(const FzOutput& out, const FzXml& item, int level);
-
-	/** Class-aware wrapper for `::fz_overlaps_rect()`.  */
-	/**
-		Test rectangle overlap.
-	
-		Returns true if the area of the overlap is
-		non zero.
-	*/
-	FZ_FUNCTION int fz_overlaps_rect(const FzRect& a, const FzRect& b);
 
 	/** Class-aware wrapper for `::fz_pack_path()`.  */
 	/**
@@ -6499,31 +6432,6 @@ namespace mupdf
 		Allocate a block of size bytes from the pool.
 	*/
 	FZ_FUNCTION void *fz_pool_alloc(const FzPool& pool, size_t size);
-
-	/** Class-aware wrapper for `::fz_pool_array_append()`.
-	
-	This function has out-params. Python/C# wrappers look like:
-		`fz_pool_array_append(::fz_pool_array *arr)` => `(void *, size_t idx)`
-	 */
-	/**
-		Append an element to the end of the array.
-	
-		Returns a pointer to the new element (initially all 0's), and
-		(optionally) the index of that element.
-	*/
-	FZ_FUNCTION void *fz_pool_array_append(const FzPoolArray& arr, size_t *idx);
-
-	/** Class-aware wrapper for `::fz_pool_array_len()`.  */
-	/**
-		Get the length of the array.
-	*/
-	FZ_FUNCTION size_t fz_pool_array_len(const FzPoolArray& arr);
-
-	/** Class-aware wrapper for `::fz_pool_array_lookup()`.  */
-	/**
-		Lookup an element in the array.
-	*/
-	FZ_FUNCTION void *fz_pool_array_lookup(const FzPoolArray& arr, size_t idx);
 
 	/** Class-aware wrapper for `::fz_pool_size()`.  */
 	/**
@@ -7670,42 +7578,12 @@ namespace mupdf
 		Essentially this code attempts to split the page horizontally and/or
 		vertically repeatedly into smaller and smaller "segments" (divisions).
 	
-		This minimises the reordering of the content, but some reordering
-		may be unavoidable.
-	
 		Returns 0 if no changes were made to the document.
 	
 		This is experimental code, and may change (or be removed) in future
 		versions!
 	*/
 	FZ_FUNCTION int fz_segment_stext_page(const FzStextPage& page);
-
-	/** Class-aware wrapper for `::fz_segment_stext_rect()`.  */
-	/**
-		Perform segmentation analysis on a rectangle of a given
-		stext page.
-	
-		Like fz_segment_stext_page, this attempts to split the given page
-		region horizontally and/or vertically repeatedly into smaller and
-		smaller "segments".
-	
-		This works for pages with structure too, but splitting with
-		rectangles that cut across structure blocks may not behave as
-		expected.
-	
-		This minimises the reordering of the content (as viewed from the
-		perspective of a depth first traversal), but some reordering may
-		be unavoidable.
-	
-		This function accepts smaller gaps for segmentation than the full
-		page segmentation does.
-	
-		Returns 0 if no changes were made to the document.
-	
-		This is experimental code, and may change (or be removed) in future
-		versions!
-	*/
-	FZ_FUNCTION int fz_segment_stext_rect(const FzStextPage& page, const FzRect& rect);
 
 	/** Class-aware wrapper for `::fz_separation_current_behavior()`.  */
 	/**
@@ -8109,39 +7987,6 @@ namespace mupdf
 	is not available because returned wrapper class for `fz_output`
 	is non-copyable. */
 
-	/* Class-aware wrapper for `fz_stext_page_block_iterator_begin()`
-	is not available because returned wrapper class for `fz_stext_page_block_iterator`
-	is non-copyable. */
-
-	/* Class-aware wrapper for `fz_stext_page_block_iterator_down()`
-	is not available because returned wrapper class for `fz_stext_page_block_iterator`
-	is non-copyable. */
-
-	/** Class-aware wrapper for `::fz_stext_page_block_iterator_eod()`.  */
-	FZ_FUNCTION int fz_stext_page_block_iterator_eod(const FzStextPageBlockIterator& pos);
-
-	/** Class-aware wrapper for `::fz_stext_page_block_iterator_eod_dfs()`.  */
-	FZ_FUNCTION int fz_stext_page_block_iterator_eod_dfs(const FzStextPageBlockIterator& pos);
-
-	/* Class-aware wrapper for `fz_stext_page_block_iterator_next()`
-	is not available because returned wrapper class for `fz_stext_page_block_iterator`
-	is non-copyable. */
-
-	/* Class-aware wrapper for `fz_stext_page_block_iterator_next_dfs()`
-	is not available because returned wrapper class for `fz_stext_page_block_iterator`
-	is non-copyable. */
-
-	/* Class-aware wrapper for `fz_stext_page_block_iterator_up()`
-	is not available because returned wrapper class for `fz_stext_page_block_iterator`
-	is non-copyable. */
-
-	/* Class-aware wrapper for `fz_stext_page_details_for_block()`
-	is not available because returned wrapper class for `fz_stext_page_details`
-	is non-copyable. */
-
-	/** Class-aware wrapper for `::fz_stext_remove_page_fill()`.  */
-	FZ_FUNCTION int fz_stext_remove_page_fill(const FzStextPage& page);
-
 	/** Class-aware wrapper for `::fz_store_item()`.  */
 	/**
 		Add an item to the store.
@@ -8458,13 +8303,6 @@ namespace mupdf
 		information.
 	*/
 	FZ_FUNCTION void fz_table_hunt(const FzStextPage& page);
-
-	/** Class-aware wrapper for `::fz_table_hunt_within_bounds()`.  */
-	/**
-		Hunt for possible tables within a specific rect on a page, and
-		update the stext with information.
-	*/
-	FZ_FUNCTION void fz_table_hunt_within_bounds(const FzStextPage& page, const FzRect& bounds);
 
 	/** Class-aware wrapper for `::fz_tell()`.  */
 	/**
@@ -8966,7 +8804,7 @@ namespace mupdf
 	FZ_FUNCTION ::fz_warning_cb *fz_warning_callback(void **user);
 
 	/** Class-aware wrapper for `::fz_warp_pixmap()`.  */
-	FZ_FUNCTION FzPixmap fz_warp_pixmap(const FzPixmap& src, const FzQuad& points, int width, int height);
+	FZ_FUNCTION FzPixmap fz_warp_pixmap(const FzPixmap& src, const ::fz_point points[4], int width, int height);
 
 	/** Class-aware wrapper for `::fz_windows_1250_from_unicode()`.  */
 	FZ_FUNCTION int fz_windows_1250_from_unicode(int u);
@@ -10674,6 +10512,9 @@ namespace mupdf
 	/** Class-aware wrapper for `::pdf_get_doc_event_callback_data()`.  */
 	FZ_FUNCTION void *pdf_get_doc_event_callback_data(const PdfDocument& doc);
 
+	/** Class-aware wrapper for `::pdf_get_embedded_file_params()`.  */
+	FZ_FUNCTION void pdf_get_embedded_file_params(const PdfObj& fs, const PdfFilespecParams& out);
+
 	/** Class-aware wrapper for `::pdf_get_filespec_params()`.  */
 	FZ_FUNCTION void pdf_get_filespec_params(const PdfObj& fs, const PdfFilespecParams& out);
 
@@ -10788,7 +10629,7 @@ namespace mupdf
 	FZ_FUNCTION int pdf_is_number(const PdfObj& obj);
 
 	/** Class-aware wrapper for `::pdf_is_ocg_hidden()`.  */
-	FZ_FUNCTION int pdf_is_ocg_hidden(const PdfDocument& doc, const PdfResourceStack& rdb, const char *usage, const PdfObj& ocg);
+	FZ_FUNCTION int pdf_is_ocg_hidden(const PdfDocument& doc, const PdfObj& rdb, const char *usage, const PdfObj& ocg);
 
 	/** Class-aware wrapper for `::pdf_is_real()`.  */
 	FZ_FUNCTION int pdf_is_real(const PdfObj& obj);
@@ -10873,7 +10714,7 @@ namespace mupdf
 	FZ_FUNCTION void pdf_lexbuf_fin(const PdfLexbuf& lexbuf);
 
 	/** Class-aware wrapper for `::pdf_lexbuf_grow()`.  */
-	FZ_FUNCTION ptrdiff_t pdf_lexbuf_grow(const PdfLexbuf& lexbuf);
+	FZ_FUNCTION int pdf_lexbuf_grow(const PdfLexbuf& lexbuf);
 
 	/** Class-aware wrapper for `::pdf_lexbuf_init()`.  */
 	FZ_FUNCTION void pdf_lexbuf_init(const PdfLexbuf& lexbuf, int size);
@@ -10936,7 +10777,7 @@ namespace mupdf
 	FZ_FUNCTION FzImage pdf_load_image(const PdfDocument& doc, const PdfObj& obj);
 
 	/** Class-aware wrapper for `::pdf_load_inline_image()`.  */
-	FZ_FUNCTION FzImage pdf_load_inline_image(const PdfDocument& doc, const PdfResourceStack& rdb, const PdfObj& dict, const FzStream& file);
+	FZ_FUNCTION FzImage pdf_load_inline_image(const PdfDocument& doc, const PdfObj& rdb, const PdfObj& dict, const FzStream& file);
 
 	/** Class-aware wrapper for `::pdf_load_journal()`.  */
 	FZ_FUNCTION void pdf_load_journal(const PdfDocument& doc, const char *filename);
@@ -11065,9 +10906,6 @@ namespace mupdf
 
 	/** Class-aware wrapper for `::pdf_lookup_page_obj()`.  */
 	FZ_FUNCTION PdfObj pdf_lookup_page_obj(const PdfDocument& doc, int needle);
-
-	/** Class-aware wrapper for `::pdf_lookup_resource()`.  */
-	FZ_FUNCTION PdfObj pdf_lookup_resource(const PdfResourceStack& stack, const PdfObj& type, const char *name);
 
 	/** Class-aware wrapper for `::pdf_lookup_substitute_font()`.
 	
@@ -11506,7 +11344,7 @@ namespace mupdf
 	FZ_FUNCTION void pdf_process_glyph(const PdfProcessor& proc, const PdfDocument& doc, const PdfObj& resources, const FzBuffer& contents);
 
 	/** Class-aware wrapper for `::pdf_process_raw_contents()`.  */
-	FZ_FUNCTION void pdf_process_raw_contents(const PdfProcessor& proc, const PdfDocument& doc, const PdfObj& stmobj, FzCookie& cookie);
+	FZ_FUNCTION void pdf_process_raw_contents(const PdfProcessor& proc, const PdfDocument& doc, const PdfObj& rdb, const PdfObj& stmobj, FzCookie& cookie);
 
 	/** Class-aware wrapper for `::pdf_processor_pop_resources()`.  */
 	FZ_FUNCTION PdfObj pdf_processor_pop_resources(const PdfProcessor& proc);

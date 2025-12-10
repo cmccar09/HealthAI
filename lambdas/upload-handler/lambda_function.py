@@ -4,6 +4,7 @@ import uuid
 import os
 from datetime import datetime
 from decimal import Decimal
+from urllib.parse import unquote_plus
 
 s3_client = boto3.client('s3')
 sqs_client = boto3.client('sqs')
@@ -23,7 +24,7 @@ def lambda_handler(event, context):
     for record in event['Records']:
         # Get uploaded file details
         bucket = record['s3']['bucket']['name']
-        key = record['s3']['object']['key']
+        key = unquote_plus(record['s3']['object']['key'])
         
         print(f"Processing upload: {key}")
         
@@ -43,18 +44,22 @@ def lambda_handler(event, context):
             Key=pdf_key
         )
         
-        # Get PDF page count
+        # Get PDF page count using PyPDF2 (more reliable in Lambda)
         pdf_obj = s3_client.get_object(Bucket=PDF_BUCKET, Key=pdf_key)
         pdf_content = pdf_obj['Body'].read()
         
         try:
-            import fitz  # PyMuPDF
-            pdf_doc = fitz.open(stream=pdf_content, filetype="pdf")
-            total_pages = len(pdf_doc)
-            pdf_doc.close()
+            from PyPDF2 import PdfReader
+            import io
+            pdf_reader = PdfReader(io.BytesIO(pdf_content))
+            total_pages = len(pdf_reader.pages)
+            print(f"PDF has {total_pages} pages")
         except Exception as e:
-            print(f"Error counting pages: {e}")
-            total_pages = 0
+            print(f"Error counting pages with PyPDF2: {e}")
+            # Fallback: estimate based on file size (rough estimate)
+            file_size_mb = len(pdf_content) / (1024 * 1024)
+            total_pages = max(1, int(file_size_mb * 10))  # Rough estimate: ~10 pages per MB
+            print(f"Estimated {total_pages} pages based on file size")
         
         # Create document record in DynamoDB
         documents_table = dynamodb.Table(DOCUMENTS_TABLE)
@@ -75,21 +80,27 @@ def lambda_handler(event, context):
             }
         )
         
-        # Send message to processing queue to start conversion
-        message = {
-            'document_id': document_id,
-            'pdf_bucket': PDF_BUCKET,
-            'pdf_key': pdf_key,
-            'filename': filename,
-            'total_pages': total_pages
-        }
+        # Send one SQS message per page for parallel processing
+        # Use unique MessageGroupId per page to enable parallel processing
+        print(f"Queueing {total_pages} pages for parallel conversion...")
         
-        sqs_client.send_message(
-            QueueUrl=PROCESSING_QUEUE_URL,
-            MessageBody=json.dumps(message),
-            MessageGroupId=document_id,
-            MessageDeduplicationId=f"{document_id}-upload-{timestamp}"
-        )
+        for page_num in range(total_pages):
+            message = {
+                'document_id': document_id,
+                'pdf_bucket': PDF_BUCKET,
+                'pdf_key': pdf_key,
+                'filename': filename,
+                'total_pages': total_pages,
+                'page_number': page_num + 1  # 1-indexed
+            }
+            
+            # Unique MessageGroupId per page enables parallel Lambda invocations
+            sqs_client.send_message(
+                QueueUrl=PROCESSING_QUEUE_URL,
+                MessageBody=json.dumps(message),
+                MessageGroupId=f"{document_id}-page-{page_num + 1}",  # Unique per page
+                MessageDeduplicationId=f"{document_id}-page-{page_num + 1}-{timestamp}"
+            )
         
         print(f"Document {document_id} queued for processing. Pages: {total_pages}")
     

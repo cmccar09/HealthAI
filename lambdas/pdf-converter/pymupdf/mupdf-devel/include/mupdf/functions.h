@@ -293,7 +293,7 @@ FZ_FUNCTION size_t ll_fz_atoz(const char *s);
 FZ_FUNCTION int ll_fz_authenticate_password(::fz_document *doc, const char *password);
 
 /** Low-level wrapper for `::fz_autowarp_pixmap()`. */
-FZ_FUNCTION ::fz_pixmap *ll_fz_autowarp_pixmap(::fz_pixmap *src, ::fz_quad points);
+FZ_FUNCTION ::fz_pixmap *ll_fz_autowarp_pixmap(::fz_pixmap *src, const ::fz_point points[4]);
 
 /** Low-level wrapper for `::fz_available()`. */
 /**
@@ -371,9 +371,6 @@ FZ_FUNCTION void ll_fz_begin_tile(::fz_device *dev, ::fz_rect area, ::fz_rect vi
 
 /** Low-level wrapper for `::fz_begin_tile_id()`. */
 FZ_FUNCTION int ll_fz_begin_tile_id(::fz_device *dev, ::fz_rect area, ::fz_rect view, float xstep, float ystep, ::fz_matrix ctm, int id);
-
-/** Low-level wrapper for `::fz_begin_tile_tid()`. */
-FZ_FUNCTION int ll_fz_begin_tile_tid(::fz_device *dev, ::fz_rect area, ::fz_rect view, float xstep, float ystep, ::fz_matrix ctm, int id, int doc_id);
 
 /** Low-level wrapper for `::fz_bidi_fragment_text()`.
 
@@ -675,9 +672,6 @@ FZ_FUNCTION int ll_fz_clampi(int x, int min, int max);
 
 /** Low-level wrapper for `::fz_clampp()`. */
 FZ_FUNCTION void *ll_fz_clampp(void *x, void *min, void *max);
-
-/** Low-level wrapper for `::fz_classify_stext_rect()`. */
-FZ_FUNCTION void ll_fz_classify_stext_rect(::fz_stext_page *page, ::fz_structure classification, ::fz_rect rect);
 
 /** Low-level wrapper for `::fz_cleanname()`. */
 /**
@@ -1030,7 +1024,7 @@ FZ_FUNCTION void ll_fz_compress_brotli(unsigned char *dest, size_t *compressed_l
 	Creates a stream assuming the default PDF parameters,
 	except the number of columns.
 */
-FZ_FUNCTION ::fz_buffer *ll_fz_compress_ccitt_fax_g3(const unsigned char *data, int columns, int rows, ptrdiff_t stride);
+FZ_FUNCTION ::fz_buffer *ll_fz_compress_ccitt_fax_g3(const unsigned char *data, int columns, int rows, int stride);
 
 /** Low-level wrapper for `::fz_compress_ccitt_fax_g4()`. */
 /**
@@ -1038,7 +1032,7 @@ FZ_FUNCTION ::fz_buffer *ll_fz_compress_ccitt_fax_g3(const unsigned char *data, 
 	Creates a stream assuming the default PDF parameters, except
 	K=-1 and the number of columns.
 */
-FZ_FUNCTION ::fz_buffer *ll_fz_compress_ccitt_fax_g4(const unsigned char *data, int columns, int rows, ptrdiff_t stride);
+FZ_FUNCTION ::fz_buffer *ll_fz_compress_ccitt_fax_g4(const unsigned char *data, int columns, int rows, int stride);
 
 /** Low-level wrapper for `::fz_compressed_buffer_size()`. */
 /**
@@ -1572,7 +1566,7 @@ FZ_FUNCTION ::fz_pixmap *ll_fz_deskew_pixmap(::fz_pixmap *src, double degrees, i
 FZ_FUNCTION void ll_fz_detach_xml(::fz_xml *node);
 
 /** Low-level wrapper for `::fz_detect_document()`. */
-FZ_FUNCTION int ll_fz_detect_document(::fz_quad *points, ::fz_pixmap *src);
+FZ_FUNCTION int ll_fz_detect_document(::fz_point *points, ::fz_pixmap *src);
 
 /** Low-level wrapper for `::fz_detect_skew()`. */
 FZ_FUNCTION double ll_fz_detect_skew(::fz_pixmap *pixmap);
@@ -1955,13 +1949,6 @@ FZ_FUNCTION void ll_fz_drop_document(::fz_document *doc);
 	the file in an inconsistent state.
 */
 FZ_FUNCTION void ll_fz_drop_document_writer(::fz_document_writer *wri);
-
-/** Low-level wrapper for `::fz_drop_drawn_tiles_for_document()`. */
-/**
-	Filter the store and throw away any stored tiles drawn for a
-	given document.
-*/
-FZ_FUNCTION void ll_fz_drop_drawn_tiles_for_document(::fz_document *doc);
 
 /** Low-level wrapper for `::fz_drop_font()`. */
 /**
@@ -3458,9 +3445,6 @@ FZ_FUNCTION int ll_fz_is_irect_inside_irect(::fz_irect inner, ::fz_irect outer);
 */
 FZ_FUNCTION int ll_fz_is_libarchive_archive(::fz_stream *file);
 
-/** Low-level wrapper for `::fz_is_lossy_image()`. */
-FZ_FUNCTION int ll_fz_is_lossy_image(::fz_image *image);
-
 /** Low-level wrapper for `::fz_is_page_range()`. */
 /**
 	Check and parse string into page ranges:
@@ -3897,12 +3881,6 @@ FZ_FUNCTION ::fz_separations *ll_fz_keep_separations(::fz_separations *sep);
 	Never throws exceptions.
 */
 FZ_FUNCTION ::fz_shade *ll_fz_keep_shade(::fz_shade *shade);
-
-/** Low-level wrapper for `::fz_keep_stext_page()`. */
-/**
-	Take a new reference to an fz_stext_page.
-*/
-FZ_FUNCTION ::fz_stext_page *ll_fz_keep_stext_page(::fz_stext_page *page);
 
 /** Low-level wrapper for `::fz_keep_storable()`. */
 /**
@@ -6005,9 +5983,6 @@ FZ_FUNCTION ::fz_document_writer *ll_fz_new_pnm_pixmap_writer(const char *path, 
 */
 FZ_FUNCTION ::fz_pool *ll_fz_new_pool();
 
-/** Low-level wrapper for `::fz_new_pool_array_imp()`. */
-FZ_FUNCTION ::fz_pool_array *ll_fz_new_pool_array_imp(::fz_pool *pool, size_t size, size_t initial);
-
 /** Low-level wrapper for `::fz_new_ppm_pixmap_writer()`. */
 FZ_FUNCTION ::fz_document_writer *ll_fz_new_ppm_pixmap_writer(const char *path, const char *options);
 
@@ -6069,41 +6044,6 @@ FZ_FUNCTION ::fz_separations *ll_fz_new_separations(int controllable);
 */
 FZ_FUNCTION ::fz_device *ll_fz_new_stext_device(::fz_stext_page *page, const ::fz_stext_options *options);
 
-/** Low-level wrapper for `::fz_new_stext_device_for_page()`. */
-/**
-	Create a device to extract the text on a page into an existing
-	fz_stext_page structure.
-
-	Gather the text on a page into blocks and lines.
-
-	The reading order is taken from the order the text is drawn in
-	the source file, so may not be accurate.
-
-	stext_page: The text page to which content should be added. This will
-	usually be a newly created (empty) text page, but it can be one
-	containing data already (for example when merging multiple
-	pages, or watermarking).
-
-	options: Options to configure the stext device.
-
-	The next 2 parameters are copied into the fz_stext_page structure's
-	ids section, so only have to be valid if you expect to interrogate
-	that section later.
-
-	chapter_num: The chapter number that this page came from.
-
-	page_num: The page number that this page came from.
-
-	The final parameter is copied into the fz_stext_page structure's
-	ids section. The mediabox for the enture fz_stext_page is unioned
-	with this, so pass fz_empty_bbox if you don't care about getting
-	a valid value back from the ids section, but you don't want to
-	upset the value in the page->mediabox field.
-
-	mediabox: The mediabox for this page.
-*/
-FZ_FUNCTION ::fz_device *ll_fz_new_stext_device_for_page(::fz_stext_page *stext_page, const ::fz_stext_options *opts, int chapter_num, int page_num, ::fz_rect mediabox);
-
 /** Low-level wrapper for `::fz_new_stext_page()`. */
 /**
 	Create an empty text page.
@@ -6131,9 +6071,6 @@ FZ_FUNCTION ::fz_stext_page *ll_fz_new_stext_page_from_page(::fz_page *page, con
 
 /** Low-level wrapper for `::fz_new_stext_page_from_page_number()`. */
 FZ_FUNCTION ::fz_stext_page *ll_fz_new_stext_page_from_page_number(::fz_document *doc, int number, const ::fz_stext_options *options);
-
-/** Low-level wrapper for `::fz_new_stext_struct()`. */
-FZ_FUNCTION ::fz_stext_block *ll_fz_new_stext_struct(::fz_stext_page *page, ::fz_structure standard, const char *raw, int index);
 
 /** Low-level wrapper for `::fz_new_store_context()`. */
 /**
@@ -6928,13 +6865,6 @@ FZ_FUNCTION int ll_fz_opt_from_list(char *opt, const char *optlist);
 */
 FZ_FUNCTION int ll_fz_option_eq(const char *a, const char *b);
 
-/** Low-level wrapper for `::fz_optpath()`. */
-/**
-	Convert "-" to "/dev/stdout" for use with command lines.
-	Also converts "nul" and "con" on Windows.
-*/
-FZ_FUNCTION char *ll_fz_optpath(char *opt);
-
 /** Low-level wrapper for `::fz_outline_glyph()`. */
 /**
 	Look a glyph up from a font, and return the outline of the
@@ -7022,15 +6952,6 @@ FZ_FUNCTION int ll_fz_output_supports_stream(::fz_output *out);
 	Pretty-print an XML tree to given output.
 */
 FZ_FUNCTION void ll_fz_output_xml(::fz_output *out, ::fz_xml *item, int level);
-
-/** Low-level wrapper for `::fz_overlaps_rect()`. */
-/**
-	Test rectangle overlap.
-
-	Returns true if the area of the overlap is
-	non zero.
-*/
-FZ_FUNCTION int ll_fz_overlaps_rect(::fz_rect a, ::fz_rect b);
 
 /** Low-level wrapper for `::fz_pack_path()`. */
 /**
@@ -7447,31 +7368,6 @@ FZ_FUNCTION int ll_fz_place_story_flags(::fz_story *story, ::fz_rect where, ::fz
 	Allocate a block of size bytes from the pool.
 */
 FZ_FUNCTION void *ll_fz_pool_alloc(::fz_pool *pool, size_t size);
-
-/** Low-level wrapper for `::fz_pool_array_append()`.
-
-This function has out-params. Python/C# wrappers look like:
-	`ll_fz_pool_array_append(::fz_pool_array *arr)` => `(void *, size_t idx)`
-*/
-/**
-	Append an element to the end of the array.
-
-	Returns a pointer to the new element (initially all 0's), and
-	(optionally) the index of that element.
-*/
-FZ_FUNCTION void *ll_fz_pool_array_append(::fz_pool_array *arr, size_t *idx);
-
-/** Low-level wrapper for `::fz_pool_array_len()`. */
-/**
-	Get the length of the array.
-*/
-FZ_FUNCTION size_t ll_fz_pool_array_len(::fz_pool_array *arr);
-
-/** Low-level wrapper for `::fz_pool_array_lookup()`. */
-/**
-	Lookup an element in the array.
-*/
-FZ_FUNCTION void *ll_fz_pool_array_lookup(::fz_pool_array *arr, size_t idx);
 
 /** Low-level wrapper for `::fz_pool_size()`. */
 /**
@@ -8655,42 +8551,12 @@ FZ_FUNCTION void ll_fz_seek_output(::fz_output *out, int64_t off, int whence);
 	Essentially this code attempts to split the page horizontally and/or
 	vertically repeatedly into smaller and smaller "segments" (divisions).
 
-	This minimises the reordering of the content, but some reordering
-	may be unavoidable.
-
 	Returns 0 if no changes were made to the document.
 
 	This is experimental code, and may change (or be removed) in future
 	versions!
 */
 FZ_FUNCTION int ll_fz_segment_stext_page(::fz_stext_page *page);
-
-/** Low-level wrapper for `::fz_segment_stext_rect()`. */
-/**
-	Perform segmentation analysis on a rectangle of a given
-	stext page.
-
-	Like fz_segment_stext_page, this attempts to split the given page
-	region horizontally and/or vertically repeatedly into smaller and
-	smaller "segments".
-
-	This works for pages with structure too, but splitting with
-	rectangles that cut across structure blocks may not behave as
-	expected.
-
-	This minimises the reordering of the content (as viewed from the
-	perspective of a depth first traversal), but some reordering may
-	be unavoidable.
-
-	This function accepts smaller gaps for segmentation than the full
-	page segmentation does.
-
-	Returns 0 if no changes were made to the document.
-
-	This is experimental code, and may change (or be removed) in future
-	versions!
-*/
-FZ_FUNCTION int ll_fz_segment_stext_rect(::fz_stext_page *page, ::fz_rect rect);
 
 /** Low-level wrapper for `::fz_separation_current_behavior()`. */
 /**
@@ -9108,36 +8974,6 @@ FZ_FUNCTION ::fz_output *ll_fz_stderr();
 */
 FZ_FUNCTION ::fz_output *ll_fz_stdout();
 
-/** Low-level wrapper for `::fz_stext_page_block_iterator_begin()`. */
-FZ_FUNCTION ::fz_stext_page_block_iterator ll_fz_stext_page_block_iterator_begin(::fz_stext_page *page);
-
-/** Low-level wrapper for `::fz_stext_page_block_iterator_down()`. */
-FZ_FUNCTION ::fz_stext_page_block_iterator ll_fz_stext_page_block_iterator_down(::fz_stext_page_block_iterator pos);
-
-/** Low-level wrapper for `::fz_stext_page_block_iterator_eod()`. */
-FZ_FUNCTION int ll_fz_stext_page_block_iterator_eod(::fz_stext_page_block_iterator pos);
-
-/** Low-level wrapper for `::fz_stext_page_block_iterator_eod_dfs()`. */
-FZ_FUNCTION int ll_fz_stext_page_block_iterator_eod_dfs(::fz_stext_page_block_iterator pos);
-
-/** Low-level wrapper for `::fz_stext_page_block_iterator_next()`. */
-FZ_FUNCTION ::fz_stext_page_block_iterator ll_fz_stext_page_block_iterator_next(::fz_stext_page_block_iterator pos);
-
-/** Low-level wrapper for `::fz_stext_page_block_iterator_next_dfs()`. */
-FZ_FUNCTION ::fz_stext_page_block_iterator ll_fz_stext_page_block_iterator_next_dfs(::fz_stext_page_block_iterator pos);
-
-/** Low-level wrapper for `::fz_stext_page_block_iterator_up()`. */
-FZ_FUNCTION ::fz_stext_page_block_iterator ll_fz_stext_page_block_iterator_up(::fz_stext_page_block_iterator pos);
-
-/** Low-level wrapper for `::fz_stext_page_details_for_block()`. */
-/**
-	Helper function to retrieve the details for a given id from a block.
-*/
-FZ_FUNCTION ::fz_stext_page_details *ll_fz_stext_page_details_for_block(::fz_stext_page *page, ::fz_stext_block *block);
-
-/** Low-level wrapper for `::fz_stext_remove_page_fill()`. */
-FZ_FUNCTION int ll_fz_stext_remove_page_fill(::fz_stext_page *page);
-
 /** Low-level wrapper for `::fz_store_item()`. */
 /**
 	Add an item to the store.
@@ -9454,13 +9290,6 @@ FZ_FUNCTION void ll_fz_sync_bits(::fz_stream *stm);
 	information.
 */
 FZ_FUNCTION void ll_fz_table_hunt(::fz_stext_page *page);
-
-/** Low-level wrapper for `::fz_table_hunt_within_bounds()`. */
-/**
-	Hunt for possible tables within a specific rect on a page, and
-	update the stext with information.
-*/
-FZ_FUNCTION void ll_fz_table_hunt_within_bounds(::fz_stext_page *page, ::fz_rect bounds);
 
 /** Low-level wrapper for `::fz_tell()`. */
 /**
@@ -9969,7 +9798,7 @@ This function has out-params. Python/C# wrappers look like:
 FZ_FUNCTION ::fz_warning_cb *ll_fz_warning_callback(void **user);
 
 /** Low-level wrapper for `::fz_warp_pixmap()`. */
-FZ_FUNCTION ::fz_pixmap *ll_fz_warp_pixmap(::fz_pixmap *src, ::fz_quad points, int width, int height);
+FZ_FUNCTION ::fz_pixmap *ll_fz_warp_pixmap(::fz_pixmap *src, const ::fz_point points[4], int width, int height);
 
 /** Low-level wrapper for `::fz_windows_1250_from_unicode()`. */
 FZ_FUNCTION int ll_fz_windows_1250_from_unicode(int u);
@@ -11787,6 +11616,9 @@ FZ_FUNCTION ::pdf_document *ll_pdf_get_bound_document(::pdf_obj *obj);
 /** Low-level wrapper for `::pdf_get_doc_event_callback_data()`. */
 FZ_FUNCTION void *ll_pdf_get_doc_event_callback_data(::pdf_document *doc);
 
+/** Low-level wrapper for `::pdf_get_embedded_file_params()`. */
+FZ_FUNCTION void ll_pdf_get_embedded_file_params(::pdf_obj *fs, ::pdf_embedded_file_params *out);
+
 /** Low-level wrapper for `::pdf_get_filespec_params()`. */
 FZ_FUNCTION void ll_pdf_get_filespec_params(::pdf_obj *fs, ::pdf_filespec_params *out);
 
@@ -11896,7 +11728,7 @@ FZ_FUNCTION int ll_pdf_is_null(::pdf_obj *obj);
 FZ_FUNCTION int ll_pdf_is_number(::pdf_obj *obj);
 
 /** Low-level wrapper for `::pdf_is_ocg_hidden()`. */
-FZ_FUNCTION int ll_pdf_is_ocg_hidden(::pdf_document *doc, ::pdf_resource_stack *rdb, const char *usage, ::pdf_obj *ocg);
+FZ_FUNCTION int ll_pdf_is_ocg_hidden(::pdf_document *doc, ::pdf_obj *rdb, const char *usage, ::pdf_obj *ocg);
 
 /** Low-level wrapper for `::pdf_is_real()`. */
 FZ_FUNCTION int ll_pdf_is_real(::pdf_obj *obj);
@@ -12012,7 +11844,7 @@ FZ_FUNCTION ::pdf_token ll_pdf_lex_no_string(::fz_stream *f, ::pdf_lexbuf *lexbu
 FZ_FUNCTION void ll_pdf_lexbuf_fin(::pdf_lexbuf *lexbuf);
 
 /** Low-level wrapper for `::pdf_lexbuf_grow()`. */
-FZ_FUNCTION ptrdiff_t ll_pdf_lexbuf_grow(::pdf_lexbuf *lexbuf);
+FZ_FUNCTION int ll_pdf_lexbuf_grow(::pdf_lexbuf *lexbuf);
 
 /** Low-level wrapper for `::pdf_lexbuf_init()`. */
 FZ_FUNCTION void ll_pdf_lexbuf_init(::pdf_lexbuf *lexbuf, int size);
@@ -12062,7 +11894,7 @@ FZ_FUNCTION char *ll_pdf_load_field_name(::pdf_obj *field);
 FZ_FUNCTION std::string ll_pdf_load_field_name2(pdf_obj* field);
 
 /** Low-level wrapper for `::pdf_load_font()`. */
-FZ_FUNCTION ::pdf_font_desc *ll_pdf_load_font(::pdf_document *doc, ::pdf_resource_stack *rdb, ::pdf_obj *obj);
+FZ_FUNCTION ::pdf_font_desc *ll_pdf_load_font(::pdf_document *doc, ::pdf_obj *rdb, ::pdf_obj *obj);
 
 /** Low-level wrapper for `::pdf_load_function()`. */
 FZ_FUNCTION ::pdf_function *ll_pdf_load_function(::pdf_obj *ref, int in, int out);
@@ -12074,7 +11906,7 @@ FZ_FUNCTION ::pdf_font_desc *ll_pdf_load_hail_mary_font(::pdf_document *doc);
 FZ_FUNCTION ::fz_image *ll_pdf_load_image(::pdf_document *doc, ::pdf_obj *obj);
 
 /** Low-level wrapper for `::pdf_load_inline_image()`. */
-FZ_FUNCTION ::fz_image *ll_pdf_load_inline_image(::pdf_document *doc, ::pdf_resource_stack *rdb, ::pdf_obj *dict, ::fz_stream *file);
+FZ_FUNCTION ::fz_image *ll_pdf_load_inline_image(::pdf_document *doc, ::pdf_obj *rdb, ::pdf_obj *dict, ::fz_stream *file);
 
 /** Low-level wrapper for `::pdf_load_journal()`. */
 FZ_FUNCTION void ll_pdf_load_journal(::pdf_document *doc, const char *filename);
@@ -12145,7 +11977,7 @@ This function has out-params. Python/C# wrappers look like:
 FZ_FUNCTION void ll_pdf_load_to_unicode(::pdf_document *doc, ::pdf_font_desc *font, const char **strings, char *collection, ::pdf_obj *cmapstm);
 
 /** Low-level wrapper for `::pdf_load_type3_font()`. */
-FZ_FUNCTION ::pdf_font_desc *ll_pdf_load_type3_font(::pdf_document *doc, ::pdf_resource_stack *rdb, ::pdf_obj *obj);
+FZ_FUNCTION ::pdf_font_desc *ll_pdf_load_type3_font(::pdf_document *doc, ::pdf_obj *rdb, ::pdf_obj *obj);
 
 /** Low-level wrapper for `::pdf_load_type3_glyphs()`. */
 FZ_FUNCTION void ll_pdf_load_type3_glyphs(::pdf_document *doc, ::pdf_font_desc *fontdesc);
@@ -12200,9 +12032,6 @@ FZ_FUNCTION int ll_pdf_lookup_page_number(::pdf_document *doc, ::pdf_obj *pageob
 
 /** Low-level wrapper for `::pdf_lookup_page_obj()`. */
 FZ_FUNCTION ::pdf_obj *ll_pdf_lookup_page_obj(::pdf_document *doc, int needle);
-
-/** Low-level wrapper for `::pdf_lookup_resource()`. */
-FZ_FUNCTION ::pdf_obj *ll_pdf_lookup_resource(::pdf_resource_stack *stack, ::pdf_obj *type, const char *name);
 
 /** Low-level wrapper for `::pdf_lookup_substitute_font()`.
 
@@ -12633,7 +12462,7 @@ FZ_FUNCTION void ll_pdf_process_contents(::pdf_processor *proc, ::pdf_document *
 FZ_FUNCTION void ll_pdf_process_glyph(::pdf_processor *proc, ::pdf_document *doc, ::pdf_obj *resources, ::fz_buffer *contents);
 
 /** Low-level wrapper for `::pdf_process_raw_contents()`. */
-FZ_FUNCTION void ll_pdf_process_raw_contents(::pdf_processor *proc, ::pdf_document *doc, ::pdf_obj *stmobj, ::fz_cookie *cookie);
+FZ_FUNCTION void ll_pdf_process_raw_contents(::pdf_processor *proc, ::pdf_document *doc, ::pdf_obj *rdb, ::pdf_obj *stmobj, ::fz_cookie *cookie);
 
 /** Low-level wrapper for `::pdf_processor_pop_resources()`. */
 FZ_FUNCTION ::pdf_obj *ll_pdf_processor_pop_resources(::pdf_processor *proc);

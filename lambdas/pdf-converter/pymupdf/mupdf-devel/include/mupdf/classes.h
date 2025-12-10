@@ -96,7 +96,6 @@ struct FzPixmap;
 struct FzPixmapImage;
 struct FzPoint;
 struct FzPool;
-struct FzPoolArray;
 struct FzPtrHeap;
 struct FzPwgOptions;
 struct FzQuad;
@@ -115,8 +114,6 @@ struct FzStextGridPositions;
 struct FzStextLine;
 struct FzStextOptions;
 struct FzStextPage;
-struct FzStextPageBlockIterator;
-struct FzStextPageDetails;
 struct FzStextStruct;
 struct FzStorable;
 struct FzStore;
@@ -153,6 +150,7 @@ struct PdfCsi;
 struct PdfCycleList;
 struct PdfDocEvent;
 struct PdfDocument;
+struct PdfEmbeddedFileParams;
 struct PdfFilespecParams;
 struct PdfFilterFactory;
 struct PdfFilterOptions;
@@ -191,7 +189,6 @@ struct PdfProcessor;
 struct PdfRange;
 struct PdfRecolorOptions;
 struct PdfRedactOptions;
-struct PdfResourceStack;
 struct PdfRevPageMap;
 struct PdfSanitizeFilterOptions;
 struct PdfTextObjectState;
@@ -2744,41 +2741,6 @@ struct FzDevice
 	*/
 	FZ_FUNCTION FzDevice(const FzStextPage& page, FzStextOptions& options);
 
-	/** Constructor using `fz_new_stext_device_for_page()`. */
-	/**
-		Create a device to extract the text on a page into an existing
-		fz_stext_page structure.
-	
-		Gather the text on a page into blocks and lines.
-	
-		The reading order is taken from the order the text is drawn in
-		the source file, so may not be accurate.
-	
-		stext_page: The text page to which content should be added. This will
-		usually be a newly created (empty) text page, but it can be one
-		containing data already (for example when merging multiple
-		pages, or watermarking).
-	
-		options: Options to configure the stext device.
-	
-		The next 2 parameters are copied into the fz_stext_page structure's
-		ids section, so only have to be valid if you expect to interrogate
-		that section later.
-	
-		chapter_num: The chapter number that this page came from.
-	
-		page_num: The page number that this page came from.
-	
-		The final parameter is copied into the fz_stext_page structure's
-		ids section. The mediabox for the enture fz_stext_page is unioned
-		with this, so pass fz_empty_bbox if you don't care about getting
-		a valid value back from the ids section, but you don't want to
-		upset the value in the page->mediabox field.
-	
-		mediabox: The mediabox for this page.
-	*/
-	FZ_FUNCTION FzDevice(const FzStextPage& stext_page, FzStextOptions& opts, int chapter_num, int page_num, const FzRect& mediabox);
-
 	/** Constructor using `fz_new_svg_device()`. */
 	/**
 		Create a device that outputs (single page) SVG files to
@@ -2889,9 +2851,6 @@ struct FzDevice
 
 	/** Class-aware wrapper for `::fz_begin_tile_id()`.  */
 	FZ_FUNCTION int fz_begin_tile_id(const FzRect& area, const FzRect& view, float xstep, float ystep, const FzMatrix& ctm, int id) const;
-
-	/** Class-aware wrapper for `::fz_begin_tile_tid()`.  */
-	FZ_FUNCTION int fz_begin_tile_tid(const FzRect& area, const FzRect& view, float xstep, float ystep, const FzMatrix& ctm, int id, int doc_id) const;
 
 	/** Class-aware wrapper for `::fz_clip_image_mask()`.  */
 	FZ_FUNCTION void fz_clip_image_mask(const FzImage& image, const FzMatrix& ctm, const FzRect& scissor) const;
@@ -3138,7 +3097,7 @@ struct FzDevice2 : FzDevice
 	FZ_FUNCTION virtual void end_mask(::fz_context *arg_0, ::fz_function *arg_2);
 	FZ_FUNCTION virtual void begin_group(::fz_context *arg_0, ::fz_rect arg_2, ::fz_colorspace *arg_3, int arg_4, int arg_5, int arg_6, float arg_7);
 	FZ_FUNCTION virtual void end_group(::fz_context *arg_0);
-	FZ_FUNCTION virtual int begin_tile(::fz_context *arg_0, ::fz_rect arg_2, ::fz_rect arg_3, float arg_4, float arg_5, ::fz_matrix arg_6, int arg_7, int arg_8);
+	FZ_FUNCTION virtual int begin_tile(::fz_context *arg_0, ::fz_rect arg_2, ::fz_rect arg_3, float arg_4, float arg_5, ::fz_matrix arg_6, int arg_7);
 	FZ_FUNCTION virtual void end_tile(::fz_context *arg_0);
 	FZ_FUNCTION virtual void render_flags(::fz_context *arg_0, int arg_2, int arg_3);
 	FZ_FUNCTION virtual void set_default_colorspaces(::fz_context *arg_0, ::fz_default_colorspaces *arg_2);
@@ -5561,9 +5520,6 @@ struct FzImage
 	*/
 	FZ_FUNCTION size_t fz_image_size() const;
 
-	/** Class-aware wrapper for `::fz_is_lossy_image()`.  */
-	FZ_FUNCTION int fz_is_lossy_image() const;
-
 	/** Class-aware wrapper for `::fz_new_bitmap_from_image()`.  */
 	/**
 		Make a bitmap from a pixmap and a halftone.
@@ -7976,9 +7932,9 @@ struct FzOutput2 : FzOutput
 	FZ_FUNCTION void use_virtual_truncate( bool use=true);
 
 	/** Default virtual method implementations; these all throw an exception. */
-	FZ_FUNCTION virtual void write(::fz_context *arg_0, const void *arg_2, unsigned long long arg_3);
-	FZ_FUNCTION virtual void seek(::fz_context *arg_0, long long arg_2, int arg_3);
-	FZ_FUNCTION virtual long long tell(::fz_context *arg_0);
+	FZ_FUNCTION virtual void write(::fz_context *arg_0, const void *arg_2, unsigned long arg_3);
+	FZ_FUNCTION virtual void seek(::fz_context *arg_0, long arg_2, int arg_3);
+	FZ_FUNCTION virtual long tell(::fz_context *arg_0);
 	FZ_FUNCTION virtual void close(::fz_context *arg_0);
 	FZ_FUNCTION virtual void drop(::fz_context *arg_0);
 	FZ_FUNCTION virtual void reset(::fz_context *arg_0);
@@ -9131,9 +9087,6 @@ struct FzPixmap
 	/** Class-aware wrapper for `::fz_alpha_from_gray()`.  */
 	FZ_FUNCTION FzPixmap fz_alpha_from_gray() const;
 
-	/** Class-aware wrapper for `::fz_autowarp_pixmap()`.  */
-	FZ_FUNCTION FzPixmap fz_autowarp_pixmap(const FzQuad& points) const;
-
 	/** Class-aware wrapper for `::fz_clear_pixmap()`.  */
 	/**
 		Sets all components (including alpha) of
@@ -9636,9 +9589,6 @@ struct FzPixmap
 	*/
 	FZ_FUNCTION void fz_tint_pixmap(int black, int white) const;
 
-	/** Class-aware wrapper for `::fz_warp_pixmap()`.  */
-	FZ_FUNCTION FzPixmap fz_warp_pixmap(const FzQuad& points, int width, int height) const;
-
 	/** Constructor using raw copy of pre-existing `::fz_pixmap`. */
 	/* This constructor is marked as `explicit` because wrapper classes do not
 	call `keep`in constructors, but do call `drop` in destructors. So
@@ -9657,7 +9607,7 @@ struct FzPixmap
 	FZ_FUNCTION unsigned char s();
 	FZ_FUNCTION unsigned char alpha();
 	FZ_FUNCTION unsigned char flags();
-	FZ_FUNCTION ptrdiff_t stride();
+	FZ_FUNCTION int stride();
 	FZ_FUNCTION FzSeparations seps();
 	FZ_FUNCTION int xres();
 	FZ_FUNCTION int yres();
@@ -9786,6 +9736,9 @@ struct FzPoint
 	FZ_FUNCTION static FzPoint fz_transform_vector(const FzPoint& vector, const FzMatrix& m);
 
 	/* == Methods. */
+
+	/** Class-aware wrapper for `::fz_detect_document()`.  */
+	FZ_FUNCTION int fz_detect_document(const FzPixmap& src);
 
 	/** Class-aware wrapper for `::fz_is_point_inside_quad()`.  */
 	/**
@@ -9956,82 +9909,6 @@ struct FzPool
 	FzPool& operator=(const FzPool& rhs);
 };
 
-/** Wrapper class for struct `fz_pool_array`. Not copyable or assignable. */
-/**
-	Routines to handle a 'variable length array' within the pool.
-
-	Appending to the array, and looking up items within the array
-	are O(log n) operations.
-*/
-struct FzPoolArray
-{
-	/** == Constructors. */
-
-	/** Constructor using `fz_new_pool_array_imp()`. */
-	FZ_FUNCTION FzPoolArray(const FzPool& pool, size_t size, size_t initial);
-
-	/** Default constructor, sets `m_internal` to null. */
-	FZ_FUNCTION FzPoolArray();
-
-	/* == Methods. */
-
-	/** Class-aware wrapper for `::fz_pool_array_append()`.
-	
-	This method has out-params. Python/C# wrappers look like:
-		`fz_pool_array_append()` => `(void *, size_t idx)`
-	 */
-	/**
-		Append an element to the end of the array.
-	
-		Returns a pointer to the new element (initially all 0's), and
-		(optionally) the index of that element.
-	*/
-	FZ_FUNCTION void *fz_pool_array_append(size_t *idx) const;
-
-	/** Class-aware wrapper for `::fz_pool_array_len()`.  */
-	/**
-		Get the length of the array.
-	*/
-	FZ_FUNCTION size_t fz_pool_array_len() const;
-
-	/** Class-aware wrapper for `::fz_pool_array_lookup()`.  */
-	/**
-		Lookup an element in the array.
-	*/
-	FZ_FUNCTION void *fz_pool_array_lookup(size_t idx) const;
-
-	/** Constructor using raw copy of pre-existing `::fz_pool_array`. */
-	FZ_FUNCTION FzPoolArray(::fz_pool_array* internal);
-
-	#ifndef NDEBUG
-	/** Destructor only decrements s_num_instances. */
-	FZ_FUNCTION ~FzPoolArray();
-	#else
-	/** We use default destructor. */
-	#endif
-
-	/** Return numerical value of .m_internal; helps with Python debugging. */
-	FZ_FUNCTION long long m_internal_value();
-
-	/** Return true iff `m_internal` is not null. */
-	FZ_FUNCTION operator bool();
-
-	/* == Member data. */
-
-	/** Pointer to wrapped data. */
-	::fz_pool_array* m_internal;
-
-	/* Ideally this would be in `#ifndef NDEBUG...#endif`, but Swig will
-	generate code regardless so we always need to have this available. */
-	FZ_DATA static int s_num_instances;
-
-	private:
-
-	/** This class is not copyable or assignable. */
-	FzPoolArray(const FzPoolArray& rhs);
-	FzPoolArray& operator=(const FzPoolArray& rhs);
-};
-
 /** Wrapper class for struct `fz_ptr_heap`. Not copyable or assignable. */
 struct FzPtrHeap
 {
@@ -10180,9 +10057,6 @@ struct FzQuad
 	FZ_FUNCTION FzQuad();
 
 	/* == Methods. */
-
-	/** Class-aware wrapper for `::fz_detect_document()`.  */
-	FZ_FUNCTION int fz_detect_document(const FzPixmap& src);
 
 	/** Class-aware wrapper for `::fz_is_empty_quad()`.  */
 	/**
@@ -10524,15 +10398,6 @@ struct FzRect
 		display list.
 	*/
 	FZ_FUNCTION FzDisplayList fz_new_display_list();
-
-	/** Class-aware wrapper for `::fz_overlaps_rect()`.  */
-	/**
-		Test rectangle overlap.
-	
-		Returns true if the area of the overlap is
-		non zero.
-	*/
-	FZ_FUNCTION int fz_overlaps_rect(const FzRect& b);
 
 	/** Class-aware wrapper for `::fz_quad_from_rect()`.  */
 	/**
@@ -11184,11 +11049,6 @@ struct FzStextBlockIterator;
 /** Wrapper class for struct `fz_stext_block`. */
 struct FzStextBlock
 {
-	/** == Constructors. */
-
-	/** Constructor using `fz_new_stext_struct()`. */
-	FZ_FUNCTION FzStextBlock(const FzStextPage& page, ::fz_structure standard, const char *raw, int index);
-
 	/** We use default copy constructor and operator=. */
 
 	/** Default constructor, sets `m_internal` to null. */
@@ -11432,10 +11292,6 @@ struct FzStextPageIterator;
 /**
 	A text page is a list of blocks, together with an overall
 	bounding box.
-
-	The name of this structure is now slightly out of date. It
-	should really be fz_stext_document, cos it can contain
-	content from multiple pages.
 */
 struct FzStextPage
 {
@@ -11476,9 +11332,6 @@ struct FzStextPage
 	FZ_FUNCTION FzStextPage();
 
 	/* == Methods. */
-
-	/** Class-aware wrapper for `::fz_classify_stext_rect()`.  */
-	FZ_FUNCTION void fz_classify_stext_rect(::fz_structure classification, const FzRect& rect) const;
 
 	/** Class-aware wrapper for `::fz_find_table_within_bounds()`.  */
 	/**
@@ -11536,44 +11389,6 @@ struct FzStextPage
 	*/
 	FZ_FUNCTION FzDevice fz_new_stext_device(FzStextOptions& options) const;
 
-	/** Class-aware wrapper for `::fz_new_stext_device_for_page()`.  */
-	/**
-		Create a device to extract the text on a page into an existing
-		fz_stext_page structure.
-	
-		Gather the text on a page into blocks and lines.
-	
-		The reading order is taken from the order the text is drawn in
-		the source file, so may not be accurate.
-	
-		stext_page: The text page to which content should be added. This will
-		usually be a newly created (empty) text page, but it can be one
-		containing data already (for example when merging multiple
-		pages, or watermarking).
-	
-		options: Options to configure the stext device.
-	
-		The next 2 parameters are copied into the fz_stext_page structure's
-		ids section, so only have to be valid if you expect to interrogate
-		that section later.
-	
-		chapter_num: The chapter number that this page came from.
-	
-		page_num: The page number that this page came from.
-	
-		The final parameter is copied into the fz_stext_page structure's
-		ids section. The mediabox for the enture fz_stext_page is unioned
-		with this, so pass fz_empty_bbox if you don't care about getting
-		a valid value back from the ids section, but you don't want to
-		upset the value in the page->mediabox field.
-	
-		mediabox: The mediabox for this page.
-	*/
-	FZ_FUNCTION FzDevice fz_new_stext_device_for_page(FzStextOptions& opts, int chapter_num, int page_num, const FzRect& mediabox) const;
-
-	/** Class-aware wrapper for `::fz_new_stext_struct()`.  */
-	FZ_FUNCTION FzStextBlock fz_new_stext_struct(::fz_structure standard, const char *raw, int index) const;
-
 	/** Class-aware wrapper for `::fz_paragraph_break()`.  */
 	/**
 		Attempt to break paragraphs at plausible places.
@@ -11620,9 +11435,6 @@ struct FzStextPage
 		Essentially this code attempts to split the page horizontally and/or
 		vertically repeatedly into smaller and smaller "segments" (divisions).
 	
-		This minimises the reordering of the content, but some reordering
-		may be unavoidable.
-	
 		Returns 0 if no changes were made to the document.
 	
 		This is experimental code, and may change (or be removed) in future
@@ -11630,38 +11442,8 @@ struct FzStextPage
 	*/
 	FZ_FUNCTION int fz_segment_stext_page() const;
 
-	/** Class-aware wrapper for `::fz_segment_stext_rect()`.  */
-	/**
-		Perform segmentation analysis on a rectangle of a given
-		stext page.
-	
-		Like fz_segment_stext_page, this attempts to split the given page
-		region horizontally and/or vertically repeatedly into smaller and
-		smaller "segments".
-	
-		This works for pages with structure too, but splitting with
-		rectangles that cut across structure blocks may not behave as
-		expected.
-	
-		This minimises the reordering of the content (as viewed from the
-		perspective of a depth first traversal), but some reordering may
-		be unavoidable.
-	
-		This function accepts smaller gaps for segmentation than the full
-		page segmentation does.
-	
-		Returns 0 if no changes were made to the document.
-	
-		This is experimental code, and may change (or be removed) in future
-		versions!
-	*/
-	FZ_FUNCTION int fz_segment_stext_rect(const FzRect& rect) const;
-
 	/** Class-aware wrapper for `::fz_snap_selection()`.  */
 	FZ_FUNCTION FzQuad fz_snap_selection(FzPoint& ap, FzPoint& bp, int mode) const;
-
-	/** Class-aware wrapper for `::fz_stext_remove_page_fill()`.  */
-	FZ_FUNCTION int fz_stext_remove_page_fill() const;
 
 	/** Class-aware wrapper for `::fz_table_hunt()`.  */
 	/**
@@ -11669,13 +11451,6 @@ struct FzStextPage
 		information.
 	*/
 	FZ_FUNCTION void fz_table_hunt() const;
-
-	/** Class-aware wrapper for `::fz_table_hunt_within_bounds()`.  */
-	/**
-		Hunt for possible tables within a specific rect on a page, and
-		update the stext with information.
-	*/
-	FZ_FUNCTION void fz_table_hunt_within_bounds(const FzRect& bounds) const;
 
 	/** Wrapper for fz_copy_selection() that returns std::string. */
 	FZ_FUNCTION std::string fz_copy_selection(FzPoint& a, FzPoint& b, int crlf);
@@ -11693,11 +11468,7 @@ struct FzStextPage
 	FZ_FUNCTION FzStextPageIterator end();
 
 	/** Constructor using raw copy of pre-existing `::fz_stext_page`. */
-	/* This constructor is marked as `explicit` because wrapper classes do not
-	call `keep`in constructors, but do call `drop` in destructors. So
-	automatic construction from a fz_stext_page* will generally cause an
-	unbalanced `drop` resulting in errors such as SEGV. */
-	FZ_FUNCTION explicit FzStextPage(::fz_stext_page* internal);
+	FZ_FUNCTION FzStextPage(::fz_stext_page* internal);
 
 	/** Destructor using fz_drop_stext_page(). */
 	FZ_FUNCTION ~FzStextPage();
@@ -11724,194 +11495,6 @@ struct FzStextPage
 	/** This class is not copyable or assignable. */
 	FzStextPage(const FzStextPage& rhs);
 	FzStextPage& operator=(const FzStextPage& rhs);
-};
-
-/** Wrapper class for struct `fz_stext_page_block_iterator`. Not copyable or assignable. */
-struct FzStextPageBlockIterator
-{
-	/** Default constructor, sets `m_internal` to null. */
-	FZ_FUNCTION FzStextPageBlockIterator();
-
-	/* == Methods. */
-
-	/** Class-aware wrapper for `::fz_stext_page_block_iterator_eod()`.  */
-	FZ_FUNCTION int fz_stext_page_block_iterator_eod() const;
-
-	/** Class-aware wrapper for `::fz_stext_page_block_iterator_eod_dfs()`.  */
-	FZ_FUNCTION int fz_stext_page_block_iterator_eod_dfs() const;
-
-	/** Constructor using raw copy of pre-existing `::fz_stext_page_block_iterator`. */
-	FZ_FUNCTION FzStextPageBlockIterator(::fz_stext_page_block_iterator* internal);
-
-	#ifndef NDEBUG
-	/** Destructor only decrements s_num_instances. */
-	FZ_FUNCTION ~FzStextPageBlockIterator();
-	#else
-	/** We use default destructor. */
-	#endif
-
-	/** Return numerical value of .m_internal; helps with Python debugging. */
-	FZ_FUNCTION long long m_internal_value();
-
-	/** Return true iff `m_internal` is not null. */
-	FZ_FUNCTION operator bool();
-
-	/* == Member data. */
-
-	/** Pointer to wrapped data. */
-	::fz_stext_page_block_iterator* m_internal;
-
-	/* Ideally this would be in `#ifndef NDEBUG...#endif`, but Swig will
-	generate code regardless so we always need to have this available. */
-	FZ_DATA static int s_num_instances;
-
-	private:
-
-	/** This class is not copyable or assignable. */
-	FzStextPageBlockIterator(const FzStextPageBlockIterator& rhs);
-	FzStextPageBlockIterator& operator=(const FzStextPageBlockIterator& rhs);
-};
-
-/** Wrapper class for struct `fz_stext_page_details`. Not copyable or assignable. */
-/**
- *	A note on stext's handling of structure.
- *
- *	A PDF document can contain a structure tree. This gives the
- *	structure of a document in its entirety as a tree. e.g.
- *
- *	Tree			MCID	INDEX
- *	-------------------------------------
- *	DOC			0	0
- *	 TOC			1	0
- *	  TOC_ITEM		2	0
- *	  TOC_ITEM		3	1
- *	  TOC_ITEM		4	2
- *	  ...
- *	 STORY			100	1
- *	  SECTION		101	0
- *	   HEADING		102	0
- *	   SUBSECTION		103	1
- *	    PARAGRAPH		104	0
- *	    PARAGRAPH		105	1
- *	    PARAGRAPH		106	2
- *	   SUBSECTION		107	2
- *	    PARAGRAPH		108	0
- *	    PARAGRAPH		109	1
- *	    PARAGRAPH		110	2
- *	   ...
- *	  SECTION		200	1
- *      ...
- *
- *	Each different section of the tree is identified as part of an
- *	MCID by a number (this is a slight simplification, but makes the
- *	explanation easier).
- *
- *	The PDF document contains markings that say "Entering MCID 0"
- *	and "Leaving MCID 0". Any content within that region is therefore
- *	identified as appearing in that particular structural region.
- *
- *	This means that content can be sent in the document in a different
- *	order to which it appears 'logically' in the tree.
- *
- *	MuPDF converts this tree form into a nested series of calls to
- *	begin_structure and end_structure.
- *
- *	For instance, if the document started out with MCID 100, then
- *	we'd send:
- *		begin_structure("DOC")
- *		begin_structure("STORY")
- *
- *	The problem with this is that if we send:
- *		begin_structure("DOC")
- *		begin_structure("STORY")
- *		begin_structure("SECTION")
- *		begin_structure("SUBSECTION")
- *
- *	or
- *		begin_structure("DOC")
- *		begin_structure("STORY")
- *		begin_structure("SECTION")
- *		begin_structure("HEADING")
- *
- *	How do I know what order the SECTION and HEADING should appear in?
- *	Are they even in the same STORY? Or the same DOC?
- *
- *	Accordingly, every begin_structure is accompanied not only with the
- *	node type, but with an index. The index is the number of this node
- *	within this level of the tree. Hence:
- *
- *		begin_structure("DOC", 0)
- *		begin_structure("STORY", 0)
- *		begin_structure("SECTION", 0)
- *		begin_structure("HEADING", 0)
- *	and
- *		begin_structure("DOC", 0)
- *		begin_structure("STORY", 0)
- *		begin_structure("SECTION", 0)
- *		begin_structure("SUBSECTION", 1)
- *
- *	are now unambiguous in their describing of the tree.
- *
- *	MuPDF automatically sends the minimal end_structure/begin_structure
- *	pairs to move us between nodes in the tree.
- *
- *	In order to accommodate this information within the structured text
- *	data structures an additional block type is used. Previously a
- *	"page" was just a list of blocks, either text or images. e.g.
- *
- *	[BLOCK:TEXT] <-> [BLOCK:IMG] <-> [BLOCK:TEXT] <-> [BLOCK:TEXT] ...
- *
- *	We now introduce a new type of block, STRUCT, that turns this into
- *	a tree:
- *
- *	[BLOCK:TEXT] <-> [BLOCK:STRUCT(IDX=0)] <-> [BLOCK:TEXT] <-> ...
- *	                      /|\
- *	[STRUCT:TYPE=DOC] <----
- *	    |
- *	[BLOCK:TEXT] <-> [BLOCK:STRUCT(IDX=0)] <-> [BLOCK:TEXT] <-> ...
- *	                      /|\
- *	[STRUCT:TYPE=STORY] <--
- *	    |
- *	   ...
- *
- *	Rather than doing a simple linear traversal of the list to extract
- *	the logical data, a caller now has to do a depth-first traversal.
- */
-struct FzStextPageDetails
-{
-	/** Default constructor, sets `m_internal` to null. */
-	FZ_FUNCTION FzStextPageDetails();
-
-	/** Constructor using raw copy of pre-existing `::fz_stext_page_details`. */
-	FZ_FUNCTION FzStextPageDetails(::fz_stext_page_details* internal);
-
-	#ifndef NDEBUG
-	/** Destructor only decrements s_num_instances. */
-	FZ_FUNCTION ~FzStextPageDetails();
-	#else
-	/** We use default destructor. */
-	#endif
-
-	/** Return numerical value of .m_internal; helps with Python debugging. */
-	FZ_FUNCTION long long m_internal_value();
-
-	/** Return true iff `m_internal` is not null. */
-	FZ_FUNCTION operator bool();
-
-	/* == Member data. */
-
-	/** Pointer to wrapped data. */
-	::fz_stext_page_details* m_internal;
-
-	/* Ideally this would be in `#ifndef NDEBUG...#endif`, but Swig will
-	generate code regardless so we always need to have this available. */
-	FZ_DATA static int s_num_instances;
-
-	private:
-
-	/** This class is not copyable or assignable. */
-	FzStextPageDetails(const FzStextPageDetails& rhs);
-	FzStextPageDetails& operator=(const FzStextPageDetails& rhs);
 };
 
 /** Wrapper class for struct `fz_stext_struct`. Not copyable or assignable. */
@@ -15861,7 +15444,7 @@ struct PdfDocument
 	FZ_FUNCTION int pdf_is_local_object(const PdfObj& obj) const;
 
 	/** Class-aware wrapper for `::pdf_is_ocg_hidden()`.  */
-	FZ_FUNCTION int pdf_is_ocg_hidden(const PdfResourceStack& rdb, const char *usage, const PdfObj& ocg) const;
+	FZ_FUNCTION int pdf_is_ocg_hidden(const PdfObj& rdb, const char *usage, const PdfObj& ocg) const;
 
 	/** Class-aware wrapper for `::pdf_js_set_console()`.  */
 	FZ_FUNCTION void pdf_js_set_console(const PdfJsConsole& console, void *user) const;
@@ -15897,7 +15480,7 @@ struct PdfDocument
 	FZ_FUNCTION FzImage pdf_load_image(const PdfObj& obj) const;
 
 	/** Class-aware wrapper for `::pdf_load_inline_image()`.  */
-	FZ_FUNCTION FzImage pdf_load_inline_image(const PdfResourceStack& rdb, const PdfObj& dict, const FzStream& file) const;
+	FZ_FUNCTION FzImage pdf_load_inline_image(const PdfObj& rdb, const PdfObj& dict, const FzStream& file) const;
 
 	/** Class-aware wrapper for `::pdf_load_journal()`.  */
 	FZ_FUNCTION void pdf_load_journal(const char *filename) const;
@@ -16342,6 +15925,44 @@ struct PdfDocument
 	/* Ideally this would be in `#ifndef NDEBUG...#endif`, but Swig will
 	generate code regardless so we always need to have this available. */
 	FZ_DATA static int s_num_instances;
+};
+
+/** Wrapper class for struct `pdf_embedded_file_params`. Not copyable or assignable. */
+struct PdfEmbeddedFileParams
+{
+	/** Default constructor, sets `m_internal` to null. */
+	FZ_FUNCTION PdfEmbeddedFileParams();
+
+	/** Constructor using raw copy of pre-existing `::pdf_embedded_file_params`. */
+	FZ_FUNCTION PdfEmbeddedFileParams(::pdf_embedded_file_params* internal);
+
+	#ifndef NDEBUG
+	/** Destructor only decrements s_num_instances. */
+	FZ_FUNCTION ~PdfEmbeddedFileParams();
+	#else
+	/** We use default destructor. */
+	#endif
+
+	/** Return numerical value of .m_internal; helps with Python debugging. */
+	FZ_FUNCTION long long m_internal_value();
+
+	/** Return true iff `m_internal` is not null. */
+	FZ_FUNCTION operator bool();
+
+	/* == Member data. */
+
+	/** Pointer to wrapped data. */
+	::pdf_embedded_file_params* m_internal;
+
+	/* Ideally this would be in `#ifndef NDEBUG...#endif`, but Swig will
+	generate code regardless so we always need to have this available. */
+	FZ_DATA static int s_num_instances;
+
+	private:
+
+	/** This class is not copyable or assignable. */
+	PdfEmbeddedFileParams(const PdfEmbeddedFileParams& rhs);
+	PdfEmbeddedFileParams& operator=(const PdfEmbeddedFileParams& rhs);
 };
 
 /** Wrapper class for struct `pdf_filespec_params`. Not copyable or assignable. */
@@ -17282,7 +16903,7 @@ struct PdfLexbuf
 	FZ_FUNCTION void pdf_lexbuf_fin() const;
 
 	/** Class-aware wrapper for `::pdf_lexbuf_grow()`.  */
-	FZ_FUNCTION ptrdiff_t pdf_lexbuf_grow() const;
+	FZ_FUNCTION int pdf_lexbuf_grow() const;
 
 	/** Class-aware wrapper for `::pdf_lexbuf_init()`.  */
 	FZ_FUNCTION void pdf_lexbuf_init(int size) const;
@@ -17980,6 +17601,9 @@ struct PdfObj
 
 	/** Class-aware wrapper for `::pdf_get_bound_document()`.  */
 	FZ_FUNCTION PdfDocument pdf_get_bound_document() const;
+
+	/** Class-aware wrapper for `::pdf_get_embedded_file_params()`.  */
+	FZ_FUNCTION void pdf_get_embedded_file_params(const PdfFilespecParams& out) const;
 
 	/** Class-aware wrapper for `::pdf_get_filespec_params()`.  */
 	FZ_FUNCTION void pdf_get_filespec_params(const PdfFilespecParams& out) const;
@@ -18759,7 +18383,7 @@ struct PdfProcessor
 	FZ_FUNCTION void pdf_process_glyph(const PdfDocument& doc, const PdfObj& resources, const FzBuffer& contents) const;
 
 	/** Class-aware wrapper for `::pdf_process_raw_contents()`.  */
-	FZ_FUNCTION void pdf_process_raw_contents(const PdfDocument& doc, const PdfObj& stmobj, FzCookie& cookie) const;
+	FZ_FUNCTION void pdf_process_raw_contents(const PdfDocument& doc, const PdfObj& rdb, const PdfObj& stmobj, FzCookie& cookie) const;
 
 	/** Class-aware wrapper for `::pdf_processor_pop_resources()`.  */
 	FZ_FUNCTION PdfObj pdf_processor_pop_resources() const;
@@ -18954,9 +18578,9 @@ struct PdfProcessor2 : PdfProcessor
 	FZ_FUNCTION virtual void op_Tm(::fz_context *arg_0, float arg_2, float arg_3, float arg_4, float arg_5, float arg_6, float arg_7);
 	FZ_FUNCTION virtual void op_Tstar(::fz_context *arg_0);
 	FZ_FUNCTION virtual void op_TJ(::fz_context *arg_0, ::pdf_obj *arg_2);
-	FZ_FUNCTION virtual void op_Tj(::fz_context *arg_0, char *arg_2, unsigned long long arg_3);
-	FZ_FUNCTION virtual void op_squote(::fz_context *arg_0, char *arg_2, unsigned long long arg_3);
-	FZ_FUNCTION virtual void op_dquote(::fz_context *arg_0, float arg_2, float arg_3, char *arg_4, unsigned long long arg_5);
+	FZ_FUNCTION virtual void op_Tj(::fz_context *arg_0, char *arg_2, unsigned long arg_3);
+	FZ_FUNCTION virtual void op_squote(::fz_context *arg_0, char *arg_2, unsigned long arg_3);
+	FZ_FUNCTION virtual void op_dquote(::fz_context *arg_0, float arg_2, float arg_3, char *arg_4, unsigned long arg_5);
 	FZ_FUNCTION virtual void op_d0(::fz_context *arg_0, float arg_2, float arg_3);
 	FZ_FUNCTION virtual void op_d1(::fz_context *arg_0, float arg_2, float arg_3, float arg_4, float arg_5, float arg_6, float arg_7);
 	FZ_FUNCTION virtual void op_CS(::fz_context *arg_0, const char *arg_2, ::fz_colorspace *arg_3);
@@ -19123,49 +18747,6 @@ struct PdfRedactOptions
 
 	/** Comparison method. */
 	FZ_FUNCTION bool operator!=(const PdfRedactOptions& rhs);
-};
-
-/** Wrapper class for struct `pdf_resource_stack`. Not copyable or assignable. */
-struct PdfResourceStack
-{
-	/** Default constructor, sets `m_internal` to null. */
-	FZ_FUNCTION PdfResourceStack();
-
-	/* == Methods. */
-
-	/** Class-aware wrapper for `::pdf_lookup_resource()`.  */
-	FZ_FUNCTION PdfObj pdf_lookup_resource(const PdfObj& type, const char *name) const;
-
-	/** Constructor using raw copy of pre-existing `::pdf_resource_stack`. */
-	FZ_FUNCTION PdfResourceStack(::pdf_resource_stack* internal);
-
-	#ifndef NDEBUG
-	/** Destructor only decrements s_num_instances. */
-	FZ_FUNCTION ~PdfResourceStack();
-	#else
-	/** We use default destructor. */
-	#endif
-
-	/** Return numerical value of .m_internal; helps with Python debugging. */
-	FZ_FUNCTION long long m_internal_value();
-
-	/** Return true iff `m_internal` is not null. */
-	FZ_FUNCTION operator bool();
-
-	/* == Member data. */
-
-	/** Pointer to wrapped data. */
-	::pdf_resource_stack* m_internal;
-
-	/* Ideally this would be in `#ifndef NDEBUG...#endif`, but Swig will
-	generate code regardless so we always need to have this available. */
-	FZ_DATA static int s_num_instances;
-
-	private:
-
-	/** This class is not copyable or assignable. */
-	PdfResourceStack(const PdfResourceStack& rhs);
-	PdfResourceStack& operator=(const PdfResourceStack& rhs);
 };
 
 /** Wrapper class for struct `pdf_rev_page_map`. Not copyable or assignable. */
