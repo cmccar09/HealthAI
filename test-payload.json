@@ -1,0 +1,14 @@
+{
+  "Records": [
+    {
+      "s3": {
+        "bucket": {
+          "name": "futuregen-health-ai"
+        },
+        "object": {
+          "key": "health-ai-upload/AlexDoe_MedicalRecords(fake).pdf"
+        }
+      }
+    }
+  ]
+}
