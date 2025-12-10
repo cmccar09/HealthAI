@@ -113,8 +113,8 @@ def lambda_handler(event, context):
             pages_table = dynamodb.Table(PAGES_TABLE)
             pages_table.update_item(
                 Key={'page_id': page_id},
-                UpdateExpression='SET #status = :status, error = :error',
-                ExpressionAttributeNames={'#status': 'status'},
+                UpdateExpression='SET #status = :status, #error = :error',
+                ExpressionAttributeNames={'#status': 'status', '#error': 'error'},
                 ExpressionAttributeValues={
                     ':status': 'ERROR',
                     ':error': str(e)
@@ -133,7 +133,7 @@ def call_claude(prompt, image_base64):
     """
     
     response = bedrock_client.invoke_model(
-        modelId='anthropic.claude-3-5-sonnet-20240620-v1:0',
+        modelId='anthropic.claude-3-5-sonnet-20241022-v2:0',
         contentType='application/json',
         accept='application/json',
         body=json.dumps({
