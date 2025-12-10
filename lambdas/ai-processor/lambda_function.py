@@ -47,15 +47,15 @@ def lambda_handler(event, context):
         document_id = message['document_id']
         page_number = message['page_number']
         total_pages = message['total_pages']
-        png_bucket = message['png_bucket']
-        png_key = message['png_key']
+        webp_bucket = message['webp_bucket']
+        webp_key = message['webp_key']
         
         print(f"Processing page {page_number}/{total_pages} - Page ID: {page_id}")
         
-        # Get PNG image from S3
-        png_obj = s3_client.get_object(Bucket=png_bucket, Key=png_key)
-        png_content = png_obj['Body'].read()
-        base64_image = base64.b64encode(png_content).decode('utf-8')
+        # Get WebP image from S3 (smaller than PNG, faster processing)
+        webp_obj = s3_client.get_object(Bucket=webp_bucket, Key=webp_key)
+        webp_content = webp_obj['Body'].read()
+        base64_image = base64.b64encode(webp_content).decode('utf-8')
         
         # Process page through multiple AI tasks in sequence (token-efficient)
         try:
@@ -133,14 +133,20 @@ def call_claude(prompt, image_base64):
     """
     
     response = bedrock_client.invoke_model(
-        modelId='anthropic.claude-3-5-sonnet-20240620-v1:0',
+        modelId='us.anthropic.claude-sonnet-4-20250514-v1:0',
         contentType='application/json',
         accept='application/json',
         body=json.dumps({
             'anthropic_version': 'bedrock-2023-05-31',
             'max_tokens': 2000,
             'temperature': 0,
-            'system': MEDINGEST_SYSTEM_PROMPT,
+            'system': [
+                {
+                    'type': 'text',
+                    'text': MEDINGEST_SYSTEM_PROMPT,
+                    'cache_control': {'type': 'ephemeral'}
+                }
+            ],
             'messages': [
                 {
                     'role': 'user',
@@ -149,7 +155,7 @@ def call_claude(prompt, image_base64):
                             'type': 'image',
                             'source': {
                                 'type': 'base64',
-                                'media_type': 'image/png',
+                                'media_type': 'image/webp',
                                 'data': image_base64
                             }
                         },
