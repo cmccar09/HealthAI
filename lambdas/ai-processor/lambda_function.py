@@ -133,7 +133,7 @@ def call_claude(prompt, image_base64):
     """
     
     response = bedrock_client.invoke_model(
-        modelId='anthropic.claude-3-5-sonnet-20241022-v2:0',
+        modelId='us.anthropic.claude-3-5-sonnet-20241022-v2:0',
         contentType='application/json',
         accept='application/json',
         body=json.dumps({
