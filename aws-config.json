@@ -1,0 +1,7 @@
+{
+  "s3": {
+    "bucket_name": "futuregen-health-ai",
+    "bucket_arn": "arn:aws:s3:::futuregen-health-ai",
+    "region": "us-east-1"
+  }
+}

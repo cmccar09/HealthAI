@@ -1,0 +1,166 @@
+{
+  "tables": [
+    {
+      "TableName": "HealthAI-Patients",
+      "KeySchema": [
+        {"AttributeName": "patient_id", "KeyType": "HASH"}
+      ],
+      "AttributeDefinitions": [
+        {"AttributeName": "patient_id", "AttributeType": "S"},
+        {"AttributeName": "patient_ssn", "AttributeType": "S"},
+        {"AttributeName": "patient_mrn", "AttributeType": "S"}
+      ],
+      "GlobalSecondaryIndexes": [
+        {
+          "IndexName": "SSN-Index",
+          "KeySchema": [{"AttributeName": "patient_ssn", "KeyType": "HASH"}],
+          "Projection": {"ProjectionType": "ALL"},
+          "BillingMode": "PAY_PER_REQUEST"
+        },
+        {
+          "IndexName": "MRN-Index",
+          "KeySchema": [{"AttributeName": "patient_mrn", "KeyType": "HASH"}],
+          "Projection": {"ProjectionType": "ALL"},
+          "BillingMode": "PAY_PER_REQUEST"
+        }
+      ],
+      "BillingMode": "PAY_PER_REQUEST"
+    },
+    {
+      "TableName": "HealthAI-Documents",
+      "KeySchema": [
+        {"AttributeName": "document_id", "KeyType": "HASH"}
+      ],
+      "AttributeDefinitions": [
+        {"AttributeName": "document_id", "AttributeType": "S"},
+        {"AttributeName": "patient_id", "AttributeType": "S"},
+        {"AttributeName": "upload_timestamp", "AttributeType": "N"}
+      ],
+      "GlobalSecondaryIndexes": [
+        {
+          "IndexName": "PatientDocuments-Index",
+          "KeySchema": [
+            {"AttributeName": "patient_id", "KeyType": "HASH"},
+            {"AttributeName": "upload_timestamp", "KeyType": "RANGE"}
+          ],
+          "Projection": {"ProjectionType": "ALL"},
+          "BillingMode": "PAY_PER_REQUEST"
+        }
+      ],
+      "BillingMode": "PAY_PER_REQUEST"
+    },
+    {
+      "TableName": "HealthAI-Pages",
+      "KeySchema": [
+        {"AttributeName": "page_id", "KeyType": "HASH"}
+      ],
+      "AttributeDefinitions": [
+        {"AttributeName": "page_id", "AttributeType": "S"},
+        {"AttributeName": "document_id", "AttributeType": "S"},
+        {"AttributeName": "page_number", "AttributeType": "N"}
+      ],
+      "GlobalSecondaryIndexes": [
+        {
+          "IndexName": "DocumentPages-Index",
+          "KeySchema": [
+            {"AttributeName": "document_id", "KeyType": "HASH"},
+            {"AttributeName": "page_number", "KeyType": "RANGE"}
+          ],
+          "Projection": {"ProjectionType": "ALL"},
+          "BillingMode": "PAY_PER_REQUEST"
+        }
+      ],
+      "BillingMode": "PAY_PER_REQUEST"
+    },
+    {
+      "TableName": "HealthAI-Medications",
+      "KeySchema": [
+        {"AttributeName": "medication_id", "KeyType": "HASH"}
+      ],
+      "AttributeDefinitions": [
+        {"AttributeName": "medication_id", "AttributeType": "S"},
+        {"AttributeName": "patient_id", "AttributeType": "S"},
+        {"AttributeName": "start_date", "AttributeType": "S"}
+      ],
+      "GlobalSecondaryIndexes": [
+        {
+          "IndexName": "PatientMedications-Index",
+          "KeySchema": [
+            {"AttributeName": "patient_id", "KeyType": "HASH"},
+            {"AttributeName": "start_date", "KeyType": "RANGE"}
+          ],
+          "Projection": {"ProjectionType": "ALL"},
+          "BillingMode": "PAY_PER_REQUEST"
+        }
+      ],
+      "BillingMode": "PAY_PER_REQUEST"
+    },
+    {
+      "TableName": "HealthAI-Diagnoses",
+      "KeySchema": [
+        {"AttributeName": "diagnosis_id", "KeyType": "HASH"}
+      ],
+      "AttributeDefinitions": [
+        {"AttributeName": "diagnosis_id", "AttributeType": "S"},
+        {"AttributeName": "patient_id", "AttributeType": "S"},
+        {"AttributeName": "diagnosed_date", "AttributeType": "S"}
+      ],
+      "GlobalSecondaryIndexes": [
+        {
+          "IndexName": "PatientDiagnoses-Index",
+          "KeySchema": [
+            {"AttributeName": "patient_id", "KeyType": "HASH"},
+            {"AttributeName": "diagnosed_date", "KeyType": "RANGE"}
+          ],
+          "Projection": {"ProjectionType": "ALL"},
+          "BillingMode": "PAY_PER_REQUEST"
+        }
+      ],
+      "BillingMode": "PAY_PER_REQUEST"
+    },
+    {
+      "TableName": "HealthAI-TestResults",
+      "KeySchema": [
+        {"AttributeName": "test_id", "KeyType": "HASH"}
+      ],
+      "AttributeDefinitions": [
+        {"AttributeName": "test_id", "AttributeType": "S"},
+        {"AttributeName": "patient_id", "AttributeType": "S"},
+        {"AttributeName": "test_date", "AttributeType": "S"}
+      ],
+      "GlobalSecondaryIndexes": [
+        {
+          "IndexName": "PatientTests-Index",
+          "KeySchema": [
+            {"AttributeName": "patient_id", "KeyType": "HASH"},
+            {"AttributeName": "test_date", "KeyType": "RANGE"}
+          ],
+          "Projection": {"ProjectionType": "ALL"},
+          "BillingMode": "PAY_PER_REQUEST"
+        }
+      ],
+      "BillingMode": "PAY_PER_REQUEST"
+    },
+    {
+      "TableName": "HealthAI-Categories",
+      "KeySchema": [
+        {"AttributeName": "category_id", "KeyType": "HASH"}
+      ],
+      "AttributeDefinitions": [
+        {"AttributeName": "category_id", "AttributeType": "S"},
+        {"AttributeName": "page_id", "AttributeType": "S"}
+      ],
+      "GlobalSecondaryIndexes": [
+        {
+          "IndexName": "PageCategories-Index",
+          "KeySchema": [
+            {"AttributeName": "page_id", "KeyType": "HASH"}
+          ],
+          "Projection": {"ProjectionType": "ALL"},
+          "BillingMode": "PAY_PER_REQUEST"
+        }
+      ],
+      "BillingMode": "PAY_PER_REQUEST"
+    }
+  ]
+}
