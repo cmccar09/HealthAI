@@ -88,16 +88,27 @@ def lambda_handler(event, context):
             ContentType='image/png'
         )
         
-        # Save as WebP (smaller size, still high quality)
+        # Save as WebP with optimized compression (quality=75 to stay under 5MB)
+        # This prevents runtime compression in AI processor
         webp_buffer = io.BytesIO()
-        pil_image.save(webp_buffer, format='WEBP', quality=95, method=6)
-        webp_buffer.seek(0)
+        pil_image.save(webp_buffer, format='WEBP', quality=75, method=6)
+        webp_content = webp_buffer.getvalue()
+        
+        # If still >4.5MB, compress further
+        MAX_SIZE = 4.5 * 1024 * 1024
+        quality = 75
+        while len(webp_content) > MAX_SIZE and quality > 35:
+            quality -= 10
+            webp_buffer = io.BytesIO()
+            pil_image.save(webp_buffer, format='WEBP', quality=quality, method=6)
+            webp_content = webp_buffer.getvalue()
+            print(f"Compressed to quality={quality}, size={len(webp_content)} bytes")
         
         webp_key = f"{WEBP_PREFIX}{document_id}/page_{page_number:04d}.webp"
         s3_client.put_object(
             Bucket=WEBP_BUCKET,
             Key=webp_key,
-            Body=webp_buffer.getvalue(),
+            Body=webp_content,
             ContentType='image/webp'
         )
         
