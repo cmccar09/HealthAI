@@ -28,9 +28,11 @@ CATEGORIES_TABLE = os.environ['CATEGORIES_TABLE']
 DOCUMENTS_TABLE = os.environ['DOCUMENTS_TABLE']
 
 # Ultra-efficient system prompt with caching
-MEDINGEST_SYSTEM_PROMPT = """MedIngest-AI: Medical document data extraction for AWS DynamoDB storage.
-Extract ALL data in one response. Output only valid JSON. Use "Unknown" for missing fields.
-No explanations. No commentary. Just JSON."""
+MEDINGEST_SYSTEM_PROMPT = """You are a medical data extraction AI. Analyze medical documents and extract structured data.
+
+CRITICAL: You MUST respond with ONLY valid JSON matching the requested structure. No explanations, no markdown, no code blocks.
+
+If a field has no data, use empty string "" or empty array []. Never leave fields undefined."""
 
 def lambda_handler(event, context):
     """
@@ -205,7 +207,24 @@ def call_claude(prompt, image_base64):
             )
             
             response_body = json.loads(response['body'].read())
-            return response_body['content'][0]['text']
+            result_text = response_body['content'][0]['text'].strip()
+            
+            print(f"Claude response length: {len(result_text)} chars")
+            if len(result_text) < 500:
+                print(f"Claude raw response: {result_text}")
+            
+            # Strip markdown code blocks if present
+            if result_text.startswith('```'):
+                # Remove ```json or ``` from start and ``` from end
+                lines = result_text.split('\n')
+                if lines[0].startswith('```'):
+                    lines = lines[1:]  # Remove first line
+                if lines and lines[-1].strip() == '```':
+                    lines = lines[:-1]  # Remove last line
+                result_text = '\n'.join(lines).strip()
+                print(f"Stripped markdown, new length: {len(result_text)} chars")
+            
+            return result_text
             
         except ClientError as e:
             error_code = e.response.get('Error', {}).get('Code', '')
@@ -240,30 +259,38 @@ def extract_comprehensive_data(image_base64, page_number):
     
     # First page gets patient data, all pages get medical content
     if page_number == 1:
-        prompt = """Extract ALL data from this medical page in ONE JSON response:
+        prompt = """Analyze this medical document page and extract data in this EXACT JSON format:
+
 {
   "patient_data": {"patient_first_name":"","patient_last_name":"","patient_dob":"","patient_ssn":"","patient_mrn":"","medical_facility":"","gender":"","blood_type":"","email":"","phone_number":"","address_line1":"","city":"","state":"","postal_code":"","country":"","emergency_contact_name":"","emergency_contact_phone":"","allergies":"","document_date":""},
-  "categories": [{"name":"<category>","reason":"<1 sentence>"}],
-  "medications": [{"medication_name":"","dosage":"","frequency":"","start_date":"","is_current":"","notes":""}],
-  "diagnoses": [{"diagnosis_description":"","diagnosis_code":"","diagnosed_date":"","is_current":"","diagnosing_doctor_first_name":"","diagnosing_doctor_last_name":"","diagnosing_facility_name":"","notes":""}],
-  "test_results": [{"test_name":"","test_date":"","result_value":"","result_unit":"","is_abnormal":"","normal_range_low":"","normal_range_high":"","notes":""}]
+  "categories": [{"name":"Cardiology","reason":"why this category"}],
+  "medications": [{"medication_name":"","dosage":"","frequency":"","start_date":"","is_current":"yes/no","notes":""}],
+  "diagnoses": [{"diagnosis_description":"","diagnosis_code":"","diagnosed_date":"","is_current":"yes/no","diagnosing_doctor_first_name":"","diagnosing_doctor_last_name":"","diagnosing_facility_name":"","notes":""}],
+  "test_results": [{"test_name":"","test_date":"","result_value":"","result_unit":"","is_abnormal":"yes/no","normal_range_low":"","normal_range_high":"","notes":""}]
 }
-Categories: Cardiology, Dermatology, Emergency, Endocrinology, Gastroenterology, Hematology, Hospitalization, Internal Medicine, Labs, Neurology, Oncology, Orthopedics, Pathology, Radiology, Surgery, Other. Use "Unknown" for missing."""
+
+Category options: Cardiology, Dermatology, Emergency, Endocrinology, Gastroenterology, Hematology, Hospitalization, Internal Medicine, Labs, Neurology, Oncology, Orthopedics, Pathology, Radiology, Surgery, Other.
+Use empty arrays [] if no data found. Respond with ONLY the JSON, nothing else."""
     else:
-        prompt = """Extract medical data from this page:
+        prompt = """Analyze this medical document page and extract data in this EXACT JSON format:
+
 {
-  "categories": [{"name":"<category>","reason":"<1 sentence>"}],
-  "medications": [{"medication_name":"","dosage":"","frequency":"","start_date":"","is_current":"","notes":""}],
-  "diagnoses": [{"diagnosis_description":"","diagnosis_code":"","diagnosed_date":"","is_current":"","diagnosing_doctor_first_name":"","diagnosing_doctor_last_name":"","diagnosing_facility_name":"","notes":""}],
-  "test_results": [{"test_name":"","test_date":"","result_value":"","result_unit":"","is_abnormal":"","normal_range_low":"","normal_range_high":"","notes":""}]
+  "categories": [{"name":"Cardiology","reason":"why this category"}],
+  "medications": [{"medication_name":"","dosage":"","frequency":"","start_date":"","is_current":"yes/no","notes":""}],
+  "diagnoses": [{"diagnosis_description":"","diagnosis_code":"","diagnosed_date":"","is_current":"yes/no","diagnosing_doctor_first_name":"","diagnosing_doctor_last_name":"","diagnosing_facility_name":"","notes":""}],
+  "test_results": [{"test_name":"","test_date":"","result_value":"","result_unit":"","is_abnormal":"yes/no","normal_range_low":"","normal_range_high":"","notes":""}]
 }
-Categories: Cardiology, Dermatology, Emergency, Endocrinology, Gastroenterology, Hematology, Hospitalization, Internal Medicine, Labs, Neurology, Oncology, Orthopedics, Pathology, Radiology, Surgery, Other. "Unknown" for missing."""
+
+Category options: Cardiology, Dermatology, Emergency, Endocrinology, Gastroenterology, Hematology, Hospitalization, Internal Medicine, Labs, Neurology, Oncology, Orthopedics, Pathology, Radiology, Surgery, Other.
+Use empty arrays [] if no data found. Respond with ONLY the JSON, nothing else."""
     
     result = call_claude(prompt, image_base64)
     try:
-        return json.loads(result)
+        parsed = json.loads(result)
+        return parsed
     except Exception as e:
         print(f"JSON parse error: {e}, returning empty data")
+        print(f"First 500 chars of response: {result[:500]}")
         return {
             'categories': [{'name': 'Other', 'reason': 'Parse error'}],
             'medications': [],
