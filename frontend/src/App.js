@@ -643,16 +643,18 @@ function ImageGallery() {
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [imageUrls, setImageUrls] = useState({});
+  const [zoomedImage, setZoomedImage] = useState(null);
+  const [zoomLevel, setZoomLevel] = useState(1);
 
   useEffect(() => {
     fetchPages();
   }, [documentId]);
 
   useEffect(() => {
-    // Generate presigned URLs for visible images
+    // Generate presigned URLs for all images
     const generateUrls = async () => {
       const urls = {};
-      for (const page of filteredPages.slice(0, 50)) { // Limit to first 50 for performance
+      for (const page of filteredPages) { // Show all pages
         if (page.webp_s3_key) {
           try {
             const command = new GetObjectCommand({
@@ -728,6 +730,35 @@ function ImageGallery() {
         page.categories?.some(cat => cat.category_name === selectedCategory)
       );
 
+  const openZoom = (page) => {
+    setZoomedImage(page);
+    setZoomLevel(1);
+  };
+
+  const closeZoom = () => {
+    setZoomedImage(null);
+    setZoomLevel(1);
+  };
+
+  const handleZoomIn = () => {
+    setZoomLevel(prev => Math.min(prev + 0.5, 3));
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel(prev => Math.max(prev - 0.5, 0.5));
+  };
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && zoomedImage) {
+        closeZoom();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [zoomedImage]);
+
   if (loading) return <div className="loading">Loading images...</div>;
 
   return (
@@ -790,6 +821,8 @@ function ImageGallery() {
                     src={imageUrls[page.page_id]}
                     alt={`Page ${page.page_number}`}
                     loading="lazy"
+                    onClick={() => openZoom(page)}
+                    style={{ cursor: 'zoom-in' }}
                   />
                 ) : (
                   <div className="image-placeholder">Loading image...</div>
@@ -803,6 +836,45 @@ function ImageGallery() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Zoom Modal */}
+      {zoomedImage && (
+        <div className="zoom-modal" onClick={closeZoom}>
+          <div className="zoom-controls">
+            <button onClick={(e) => { e.stopPropagation(); handleZoomOut(); }}>
+              🔍−
+            </button>
+            <span>{Math.round(zoomLevel * 100)}%</span>
+            <button onClick={(e) => { e.stopPropagation(); handleZoomIn(); }}>
+              🔍+
+            </button>
+            <button onClick={closeZoom} className="close-btn">
+              ✕ Close
+            </button>
+          </div>
+          <div className="zoom-content" onClick={(e) => e.stopPropagation()}>
+            <div className="zoom-image-wrapper">
+              <img
+                src={imageUrls[zoomedImage.page_id]}
+                alt={`Page ${zoomedImage.page_number}`}
+                style={{ transform: `scale(${zoomLevel})` }}
+              />
+            </div>
+            <div className="zoom-info">
+              <h3>Page {zoomedImage.page_number}</h3>
+              {zoomedImage.categories && zoomedImage.categories.length > 0 && (
+                <div className="category-tags">
+                  {zoomedImage.categories.map((cat, idx) => (
+                    <span key={idx} className="category-tag">
+                      {cat.category_name}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
