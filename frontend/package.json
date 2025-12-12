@@ -6,9 +6,11 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.20.0",
-    "axios": "^1.6.2",
-    "aws-amplify": "^6.0.0",
-    "@aws-amplify/ui-react": "^6.0.0"
+    "aws-sdk": "^2.1500.0",
+    "@aws-sdk/client-dynamodb": "^3.470.0",
+    "@aws-sdk/lib-dynamodb": "^3.470.0",
+    "@aws-sdk/client-s3": "^3.470.0",
+    "@aws-sdk/s3-request-presigner": "^3.470.0"
   },
   "scripts": {
     "start": "react-scripts start",
