@@ -33,7 +33,7 @@ function App() {
       <div className="App">
         <header className="app-header">
           <div className="header-content">
-            <h1>🏥 HealthAI</h1>
+            <h1>🏥 MED POC</h1>
             <p>Medical Document Intelligence Platform</p>
           </div>
         </header>
