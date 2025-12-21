@@ -54,6 +54,15 @@ lambda-package/
 # Dependencies
 node_modules/
 
+# React build
+frontend/build/
+
+# Amplify
+frontend/amplify/
+frontend/.amplify/
+frontend/amplify-backup/
+.amplifyrc
+
 # Secrets
 *creds.json
 *.pem

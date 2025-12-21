@@ -46,6 +46,7 @@ function App() {
           <Route path="/document/:documentId/diagnoses" element={<DiagnosesPage />} />
           <Route path="/document/:documentId/tests" element={<TestResultsPage />} />
           <Route path="/document/:documentId/images" element={<ImageGallery />} />
+          <Route path="/document/:documentId/next-steps" element={<NextStepsPage />} />
         </Routes>
       </div>
     </Router>
@@ -216,6 +217,12 @@ function DocumentDashboard() {
           <h3>Page Images</h3>
           <p className="stat">{stats.pages} pages with categories</p>
         </Link>
+
+        <Link to={`/document/${documentId}/next-steps`} className="dashboard-card highlight-card">
+          <div className="card-icon">🎯</div>
+          <h3>Next Steps</h3>
+          <p>AI-powered patient care recommendations</p>
+        </Link>
       </div>
     </div>
   );
@@ -351,6 +358,10 @@ function MedicationsPage() {
   const [medications, setMedications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [pages, setPages] = useState({});
+  const [imageUrls, setImageUrls] = useState({});
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [zoomLevel, setZoomLevel] = useState(1);
 
   useEffect(() => {
     fetchMedications();
@@ -358,19 +369,90 @@ function MedicationsPage() {
 
   const fetchMedications = async () => {
     try {
-      const command = new ScanCommand({
-        TableName: 'HealthAI-Medications',
-        FilterExpression: 'document_id = :docId',
-        ExpressionAttributeValues: { ':docId': documentId }
+      const [medsRes, pagesRes] = await Promise.all([
+        docClient.send(new ScanCommand({
+          TableName: 'HealthAI-Medications',
+          FilterExpression: 'document_id = :docId',
+          ExpressionAttributeValues: { ':docId': documentId }
+        })),
+        docClient.send(new ScanCommand({
+          TableName: 'HealthAI-Pages',
+          FilterExpression: 'document_id = :docId',
+          ExpressionAttributeValues: { ':docId': documentId }
+        }))
+      ]);
+      
+      const medsData = medsRes.Items || [];
+      const pagesData = pagesRes.Items || [];
+      
+      // Create maps of page_id to page data
+      const pagesByPageId = {};
+      const pagesByPageNumber = {};
+      pagesData.forEach(page => {
+        pagesByPageId[page.page_id] = page;
+        pagesByPageNumber[page.page_number] = page;
       });
-      const response = await docClient.send(command);
-      setMedications(response.Items || []);
+      
+      setMedications(medsData);
+      setPages(pagesByPageNumber);
+      
+      // Generate presigned URLs for pages that have medications
+      const urls = {};
+      for (const med of medsData) {
+        const page = pagesByPageId[med.page_id];
+        if (page && page.webp_s3_key) {
+          const pageNumber = page.page_number;
+          if (!urls[pageNumber]) {
+            try {
+              const command = new GetObjectCommand({
+                Bucket: S3_BUCKET,
+                Key: page.webp_s3_key
+              });
+              urls[pageNumber] = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+            } catch (error) {
+              console.error(`Error generating URL for page ${pageNumber}:`, error);
+            }
+          }
+        }
+      }
+      setImageUrls(urls);
     } catch (error) {
       console.error('Error fetching medications:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  const openImageModal = (pageNumber) => {
+    if (imageUrls[pageNumber]) {
+      setSelectedImage({ pageNumber, url: imageUrls[pageNumber] });
+      setZoomLevel(1);
+    }
+  };
+
+  const closeImageModal = () => {
+    setSelectedImage(null);
+    setZoomLevel(1);
+  };
+
+  const handleZoomIn = () => {
+    setZoomLevel(prev => Math.min(prev + 0.5, 3));
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel(prev => Math.max(prev - 0.5, 0.5));
+  };
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && selectedImage) {
+        closeImageModal();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedImage]);
 
   const filteredMeds = medications.filter(med =>
     med.medication_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -412,27 +494,78 @@ function MedicationsPage() {
                 <th>End Date</th>
                 <th>Status</th>
                 <th>Page</th>
+                <th>View</th>
               </tr>
             </thead>
             <tbody>
-              {filteredMeds.map((med, idx) => (
-                <tr key={idx}>
-                  <td><strong>{med.medication_name || 'N/A'}</strong></td>
-                  <td>{med.dosage || 'N/A'}</td>
-                  <td>{med.frequency || 'N/A'}</td>
-                  <td>{med.route || 'N/A'}</td>
-                  <td>{med.start_date || 'N/A'}</td>
-                  <td>{med.end_date || '-'}</td>
-                  <td>
-                    <span className={`status ${med.is_current === 'Yes' ? 'current' : 'discontinued'}`}>
-                      {med.is_current === 'Yes' ? '✓ Current' : '× Discontinued'}
-                    </span>
-                  </td>
-                  <td>{med.page_number || '-'}</td>
-                </tr>
-              ))}
+              {filteredMeds.map((med, idx) => {
+                // Get page data from page_id
+                const medPage = Object.values(pages).find(p => p.page_id === med.page_id);
+                const pageNumber = medPage?.page_number;
+                
+                return (
+                  <tr key={idx}>
+                    <td><strong>{med.medication_name || 'N/A'}</strong></td>
+                    <td>{med.dosage || 'N/A'}</td>
+                    <td>{med.frequency || 'N/A'}</td>
+                    <td>{med.route || 'N/A'}</td>
+                    <td>{med.start_date || 'N/A'}</td>
+                    <td>{med.end_date || '-'}</td>
+                    <td>
+                      <span className={`status ${med.is_current === 'Yes' ? 'current' : 'discontinued'}`}>
+                        {med.is_current === 'Yes' ? '✓ Current' : '× Discontinued'}
+                      </span>
+                    </td>
+                    <td>{pageNumber || '-'}</td>
+                    <td>
+                      {pageNumber && imageUrls[pageNumber] ? (
+                        <button 
+                          className="view-image-btn"
+                          onClick={() => openImageModal(pageNumber)}
+                          title="View source page"
+                        >
+                          🖼️ View
+                        </button>
+                      ) : (
+                        <span className="no-image">-</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Image Modal */}
+      {selectedImage && (
+        <div className="zoom-modal" onClick={closeImageModal}>
+          <div className="zoom-controls">
+            <button onClick={(e) => { e.stopPropagation(); handleZoomOut(); }}>
+              🔍−
+            </button>
+            <span>{Math.round(zoomLevel * 100)}%</span>
+            <button onClick={(e) => { e.stopPropagation(); handleZoomIn(); }}>
+              🔍+
+            </button>
+            <button onClick={closeImageModal} className="close-btn">
+              ✕ Close
+            </button>
+          </div>
+          <div className="zoom-content" onClick={(e) => e.stopPropagation()}>
+            <div className="zoom-image-wrapper">
+              <img
+                src={selectedImage.url}
+                alt={`Page ${selectedImage.pageNumber}`}
+                style={{ transform: `scale(${zoomLevel})` }}
+              />
+            </div>
+            <div className="zoom-info">
+              <h3>Page {selectedImage.pageNumber}</h3>
+              <p>Source page containing medication</p>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -445,6 +578,10 @@ function DiagnosesPage() {
   const [diagnoses, setDiagnoses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [pages, setPages] = useState({});
+  const [imageUrls, setImageUrls] = useState({});
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [zoomLevel, setZoomLevel] = useState(1);
 
   useEffect(() => {
     fetchDiagnoses();
@@ -452,19 +589,90 @@ function DiagnosesPage() {
 
   const fetchDiagnoses = async () => {
     try {
-      const command = new ScanCommand({
-        TableName: 'HealthAI-Diagnoses',
-        FilterExpression: 'document_id = :docId',
-        ExpressionAttributeValues: { ':docId': documentId }
+      const [diagRes, pagesRes] = await Promise.all([
+        docClient.send(new ScanCommand({
+          TableName: 'HealthAI-Diagnoses',
+          FilterExpression: 'document_id = :docId',
+          ExpressionAttributeValues: { ':docId': documentId }
+        })),
+        docClient.send(new ScanCommand({
+          TableName: 'HealthAI-Pages',
+          FilterExpression: 'document_id = :docId',
+          ExpressionAttributeValues: { ':docId': documentId }
+        }))
+      ]);
+      
+      const diagData = diagRes.Items || [];
+      const pagesData = pagesRes.Items || [];
+      
+      // Create maps of page_id to page data
+      const pagesByPageId = {};
+      const pagesByPageNumber = {};
+      pagesData.forEach(page => {
+        pagesByPageId[page.page_id] = page;
+        pagesByPageNumber[page.page_number] = page;
       });
-      const response = await docClient.send(command);
-      setDiagnoses(response.Items || []);
+      
+      setDiagnoses(diagData);
+      setPages(pagesByPageNumber);
+      
+      // Generate presigned URLs for pages that have diagnoses
+      const urls = {};
+      for (const diag of diagData) {
+        const page = pagesByPageId[diag.page_id];
+        if (page && page.webp_s3_key) {
+          const pageNumber = page.page_number;
+          if (!urls[pageNumber]) {
+            try {
+              const command = new GetObjectCommand({
+                Bucket: S3_BUCKET,
+                Key: page.webp_s3_key
+              });
+              urls[pageNumber] = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+            } catch (error) {
+              console.error(`Error generating URL for page ${pageNumber}:`, error);
+            }
+          }
+        }
+      }
+      setImageUrls(urls);
     } catch (error) {
       console.error('Error fetching diagnoses:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  const openImageModal = (pageNumber) => {
+    if (imageUrls[pageNumber]) {
+      setSelectedImage({ pageNumber, url: imageUrls[pageNumber] });
+      setZoomLevel(1);
+    }
+  };
+
+  const closeImageModal = () => {
+    setSelectedImage(null);
+    setZoomLevel(1);
+  };
+
+  const handleZoomIn = () => {
+    setZoomLevel(prev => Math.min(prev + 0.5, 3));
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel(prev => Math.max(prev - 0.5, 0.5));
+  };
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && selectedImage) {
+        closeImageModal();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedImage]);
 
   const filteredDiagnoses = diagnoses.filter(diag =>
     diag.diagnosis_description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -495,33 +703,79 @@ function DiagnosesPage() {
         <div className="info-message">No diagnoses found</div>
       ) : (
         <div className="diagnosis-grid">
-          {filteredDiagnoses.map((diag, idx) => (
-            <div key={idx} className="diagnosis-card">
-              <h4>{diag.diagnosis_description || 'N/A'}</h4>
-              {diag.diagnosis_code && (
-                <p className="code">Code: {diag.diagnosis_code}</p>
-              )}
-              <div className="diagnosis-meta">
-                {diag.diagnosed_date && (
-                  <p><strong>Date:</strong> {diag.diagnosed_date}</p>
+          {filteredDiagnoses.map((diag, idx) => {
+            // Get page data from page_id
+            const diagPage = Object.values(pages).find(p => p.page_id === diag.page_id);
+            const pageNumber = diagPage?.page_number;
+            
+            return (
+              <div key={idx} className="diagnosis-card">
+                <h4>{diag.diagnosis_description || 'N/A'}</h4>
+                {diag.diagnosis_code && (
+                  <p className="code">Code: {diag.diagnosis_code}</p>
                 )}
-                {diag.diagnosing_doctor_first_name && (
-                  <p><strong>Doctor:</strong> Dr. {diag.diagnosing_doctor_first_name} {diag.diagnosing_doctor_last_name}</p>
+                <div className="diagnosis-meta">
+                  {diag.diagnosed_date && (
+                    <p><strong>Date:</strong> {diag.diagnosed_date}</p>
+                  )}
+                  {diag.diagnosing_doctor_first_name && (
+                    <p><strong>Doctor:</strong> Dr. {diag.diagnosing_doctor_first_name} {diag.diagnosing_doctor_last_name}</p>
+                  )}
+                  {diag.diagnosing_facility_name && (
+                    <p><strong>Facility:</strong> {diag.diagnosing_facility_name}</p>
+                  )}
+                  {pageNumber && (
+                    <p><strong>Page:</strong> {pageNumber}</p>
+                  )}
+                </div>
+                {diag.notes && diag.notes !== 'None' && (
+                  <div className="notes">
+                    <strong>Notes:</strong> {diag.notes}
+                  </div>
                 )}
-                {diag.diagnosing_facility_name && (
-                  <p><strong>Facility:</strong> {diag.diagnosing_facility_name}</p>
-                )}
-                {diag.page_number && (
-                  <p><strong>Page:</strong> {diag.page_number}</p>
+                {pageNumber && imageUrls[pageNumber] && (
+                  <button 
+                    className="view-image-btn diagnosis-view-btn"
+                    onClick={() => openImageModal(pageNumber)}
+                    title="View source page"
+                  >
+                    🖼️ View Source Page
+                  </button>
                 )}
               </div>
-              {diag.notes && diag.notes !== 'None' && (
-                <div className="notes">
-                  <strong>Notes:</strong> {diag.notes}
-                </div>
-              )}
+            );
+          })}
+        </div>
+      )}
+
+      {/* Image Modal */}
+      {selectedImage && (
+        <div className="zoom-modal" onClick={closeImageModal}>
+          <div className="zoom-controls">
+            <button onClick={(e) => { e.stopPropagation(); handleZoomOut(); }}>
+              🔍−
+            </button>
+            <span>{Math.round(zoomLevel * 100)}%</span>
+            <button onClick={(e) => { e.stopPropagation(); handleZoomIn(); }}>
+              🔍+
+            </button>
+            <button onClick={closeImageModal} className="close-btn">
+              ✕ Close
+            </button>
+          </div>
+          <div className="zoom-content" onClick={(e) => e.stopPropagation()}>
+            <div className="zoom-image-wrapper">
+              <img
+                src={selectedImage.url}
+                alt={`Page ${selectedImage.pageNumber}`}
+                style={{ transform: `scale(${zoomLevel})` }}
+              />
             </div>
-          ))}
+            <div className="zoom-info">
+              <h3>Page {selectedImage.pageNumber}</h3>
+              <p>Source page containing diagnosis</p>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -535,6 +789,10 @@ function TestResultsPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAbnormalOnly, setShowAbnormalOnly] = useState(false);
+  const [pages, setPages] = useState({});
+  const [imageUrls, setImageUrls] = useState({});
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [zoomLevel, setZoomLevel] = useState(1);
 
   useEffect(() => {
     fetchTests();
@@ -542,19 +800,101 @@ function TestResultsPage() {
 
   const fetchTests = async () => {
     try {
-      const command = new ScanCommand({
-        TableName: 'HealthAI-TestResults',
-        FilterExpression: 'document_id = :docId',
-        ExpressionAttributeValues: { ':docId': documentId }
+      const [testsRes, pagesRes] = await Promise.all([
+        docClient.send(new ScanCommand({
+          TableName: 'HealthAI-TestResults',
+          FilterExpression: 'document_id = :docId',
+          ExpressionAttributeValues: { ':docId': documentId }
+        })),
+        docClient.send(new ScanCommand({
+          TableName: 'HealthAI-Pages',
+          FilterExpression: 'document_id = :docId',
+          ExpressionAttributeValues: { ':docId': documentId }
+        }))
+      ]);
+      
+      const testsData = testsRes.Items || [];
+      const pagesData = pagesRes.Items || [];
+      
+      // Create a map of page_id to page data (with page_number and webp_s3_key)
+      const pagesByPageId = {};
+      const pagesByPageNumber = {};
+      pagesData.forEach(page => {
+        pagesByPageId[page.page_id] = page;
+        pagesByPageNumber[page.page_number] = page;
       });
-      const response = await docClient.send(command);
-      setTests(response.Items || []);
+      
+      setTests(testsData);
+      setPages(pagesByPageNumber);
+      
+      // Generate presigned URLs for pages that have test results
+      const urls = {};
+      console.log('Test Results Data:', testsData);
+      console.log('Pages by ID:', pagesByPageId);
+      console.log('Pages by Number:', pagesByPageNumber);
+      
+      for (const test of testsData) {
+        // Tests have page_id, so we need to lookup the page to get page_number
+        const page = pagesByPageId[test.page_id];
+        if (page && page.webp_s3_key) {
+          const pageNumber = page.page_number;
+          console.log(`Test: ${test.test_name}, Page ID: ${test.page_id}, Page Number: ${pageNumber}`);
+          
+          if (!urls[pageNumber]) {
+            try {
+              const command = new GetObjectCommand({
+                Bucket: S3_BUCKET,
+                Key: page.webp_s3_key
+              });
+              urls[pageNumber] = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+              console.log(`Generated URL for page ${pageNumber}`);
+            } catch (error) {
+              console.error(`Error generating URL for page ${pageNumber}:`, error);
+            }
+          }
+        } else {
+          console.log(`Test: ${test.test_name}, Page ID: ${test.page_id}, No page data found`);
+        }
+      }
+      console.log('Image URLs:', urls);
+      setImageUrls(urls);
     } catch (error) {
       console.error('Error fetching test results:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  const openImageModal = (pageNumber) => {
+    if (imageUrls[pageNumber]) {
+      setSelectedImage({ pageNumber, url: imageUrls[pageNumber] });
+      setZoomLevel(1);
+    }
+  };
+
+  const closeImageModal = () => {
+    setSelectedImage(null);
+    setZoomLevel(1);
+  };
+
+  const handleZoomIn = () => {
+    setZoomLevel(prev => Math.min(prev + 0.5, 3));
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel(prev => Math.max(prev - 0.5, 0.5));
+  };
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && selectedImage) {
+        closeImageModal();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedImage]);
 
   const filteredTests = tests.filter(test => {
     const matchesSearch = test.test_name?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -605,30 +945,81 @@ function TestResultsPage() {
                 <th>Normal Range</th>
                 <th>Status</th>
                 <th>Page</th>
+                <th>View</th>
               </tr>
             </thead>
             <tbody>
-              {filteredTests.map((test, idx) => (
-                <tr key={idx} className={test.is_abnormal === 'Yes' ? 'abnormal-row' : ''}>
-                  <td><strong>{test.test_name || 'N/A'}</strong></td>
-                  <td>{test.test_date || 'N/A'}</td>
-                  <td className="result-value">{test.result_value || 'N/A'}</td>
-                  <td>{test.result_unit || '-'}</td>
-                  <td>
-                    {test.normal_range_low && test.normal_range_high
-                      ? `${test.normal_range_low} - ${test.normal_range_high}`
-                      : '-'}
-                  </td>
-                  <td>
-                    <span className={`status ${test.is_abnormal === 'Yes' ? 'abnormal' : 'normal'}`}>
-                      {test.is_abnormal === 'Yes' ? '⚠️ Abnormal' : '✓ Normal'}
-                    </span>
-                  </td>
-                  <td>{test.page_number || '-'}</td>
-                </tr>
-              ))}
+              {filteredTests.map((test, idx) => {
+                // Get page data from page_id
+                const testPage = Object.values(pages).find(p => p.page_id === test.page_id);
+                const pageNumber = testPage?.page_number;
+                
+                return (
+                  <tr key={idx} className={test.is_abnormal === 'Yes' ? 'abnormal-row' : ''}>
+                    <td><strong>{test.test_name || 'N/A'}</strong></td>
+                    <td>{test.test_date || 'N/A'}</td>
+                    <td className="result-value">{test.result_value || 'N/A'}</td>
+                    <td>{test.result_unit || '-'}</td>
+                    <td>
+                      {test.normal_range_low && test.normal_range_high
+                        ? `${test.normal_range_low} - ${test.normal_range_high}`
+                        : '-'}
+                    </td>
+                    <td>
+                      <span className={`status ${test.is_abnormal === 'Yes' ? 'abnormal' : 'normal'}`}>
+                        {test.is_abnormal === 'Yes' ? '⚠️ Abnormal' : '✓ Normal'}
+                      </span>
+                    </td>
+                    <td>{pageNumber || '-'}</td>
+                    <td>
+                      {pageNumber && imageUrls[pageNumber] ? (
+                        <button 
+                          className="view-image-btn"
+                          onClick={() => openImageModal(pageNumber)}
+                          title="View source page"
+                        >
+                          🖼️ View
+                        </button>
+                      ) : (
+                        <span className="no-image">-</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Image Modal */}
+      {selectedImage && (
+        <div className="zoom-modal" onClick={closeImageModal}>
+          <div className="zoom-controls">
+            <button onClick={(e) => { e.stopPropagation(); handleZoomOut(); }}>
+              🔍−
+            </button>
+            <span>{Math.round(zoomLevel * 100)}%</span>
+            <button onClick={(e) => { e.stopPropagation(); handleZoomIn(); }}>
+              🔍+
+            </button>
+            <button onClick={closeImageModal} className="close-btn">
+              ✕ Close
+            </button>
+          </div>
+          <div className="zoom-content" onClick={(e) => e.stopPropagation()}>
+            <div className="zoom-image-wrapper">
+              <img
+                src={selectedImage.url}
+                alt={`Page ${selectedImage.pageNumber}`}
+                style={{ transform: `scale(${zoomLevel})` }}
+              />
+            </div>
+            <div className="zoom-info">
+              <h3>Page {selectedImage.pageNumber}</h3>
+              <p>Source page containing test result</p>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -877,6 +1268,359 @@ function ImageGallery() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Next Steps Page - AI-Powered Recommendations
+function NextStepsPage() {
+  const { documentId } = useParams();
+  const [loading, setLoading] = useState(true);
+  const [medications, setMedications] = useState([]);
+  const [diagnoses, setDiagnoses] = useState([]);
+  const [testResults, setTestResults] = useState([]);
+  const [recommendations, setRecommendations] = useState([]);
+
+  useEffect(() => {
+    fetchDataAndGenerateRecommendations();
+  }, [documentId]);
+
+  const fetchDataAndGenerateRecommendations = async () => {
+    try {
+      // Fetch all relevant medical data
+      const [medsRes, diagRes, testsRes] = await Promise.all([
+        docClient.send(new ScanCommand({
+          TableName: 'HealthAI-Medications',
+          FilterExpression: 'document_id = :docId',
+          ExpressionAttributeValues: { ':docId': documentId }
+        })),
+        docClient.send(new ScanCommand({
+          TableName: 'HealthAI-Diagnoses',
+          FilterExpression: 'document_id = :docId',
+          ExpressionAttributeValues: { ':docId': documentId }
+        })),
+        docClient.send(new ScanCommand({
+          TableName: 'HealthAI-TestResults',
+          FilterExpression: 'document_id = :docId',
+          ExpressionAttributeValues: { ':docId': documentId }
+        }))
+      ]);
+
+      const medsData = medsRes.Items || [];
+      const diagData = diagRes.Items || [];
+      const testsData = testsRes.Items || [];
+
+      setMedications(medsData);
+      setDiagnoses(diagData);
+      setTestResults(testsData);
+
+      // Generate AI-powered recommendations
+      const aiRecommendations = generateRecommendations(medsData, diagData, testsData);
+      setRecommendations(aiRecommendations);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateRecommendations = (meds, diags, tests) => {
+    const recs = [];
+    
+    // Analyze medications
+    const currentMeds = meds.filter(m => m.is_current === 'Yes');
+    const discontinuedMeds = meds.filter(m => m.is_current !== 'Yes');
+    
+    if (currentMeds.length > 5) {
+      recs.push({
+        category: 'Medication Management',
+        priority: 'high',
+        icon: '💊',
+        title: 'Medication Review Recommended',
+        description: `Patient is currently on ${currentMeds.length} medications. Consider scheduling a comprehensive medication review to assess for potential drug interactions and optimize therapy.`,
+        actions: [
+          'Schedule pharmacist consultation',
+          'Review for duplicate therapies',
+          'Check for drug-drug interactions',
+          'Assess medication adherence'
+        ]
+      });
+    }
+
+    // Check for specific medication classes
+    const hasAnticoagulant = currentMeds.some(m => 
+      m.medication_name?.toLowerCase().includes('warfarin') ||
+      m.medication_name?.toLowerCase().includes('apixaban') ||
+      m.medication_name?.toLowerCase().includes('rivaroxaban')
+    );
+    
+    if (hasAnticoagulant) {
+      recs.push({
+        category: 'Lab Monitoring',
+        priority: 'high',
+        icon: '🔬',
+        title: 'Anticoagulation Monitoring Required',
+        description: 'Patient is on anticoagulation therapy. Regular monitoring is essential for patient safety.',
+        actions: [
+          'Schedule INR/PT testing (if on warfarin)',
+          'Monitor for bleeding complications',
+          'Review medication interactions',
+          'Patient education on dietary restrictions'
+        ]
+      });
+    }
+
+    // Analyze diagnoses
+    const hasChronicCondition = diags.some(d => {
+      const desc = d.diagnosis_description?.toLowerCase() || '';
+      return desc.includes('diabetes') || desc.includes('hypertension') || 
+             desc.includes('heart failure') || desc.includes('copd') ||
+             desc.includes('asthma') || desc.includes('chronic');
+    });
+
+    if (hasChronicCondition) {
+      recs.push({
+        category: 'Chronic Disease Management',
+        priority: 'medium',
+        icon: '🩺',
+        title: 'Chronic Condition Follow-up',
+        description: 'Patient has chronic conditions requiring ongoing management and monitoring.',
+        actions: [
+          'Schedule regular follow-up appointments',
+          'Review disease-specific care plans',
+          'Assess need for specialist referrals',
+          'Patient education on condition management'
+        ]
+      });
+    }
+
+    // Check for diabetes-related needs
+    const hasDiabetes = diags.some(d => 
+      d.diagnosis_description?.toLowerCase().includes('diabetes')
+    );
+    
+    if (hasDiabetes) {
+      recs.push({
+        category: 'Diabetes Care',
+        priority: 'high',
+        icon: '🩸',
+        title: 'Diabetes Monitoring & Management',
+        description: 'Comprehensive diabetes care plan recommended.',
+        actions: [
+          'Schedule HbA1c testing (every 3 months)',
+          'Annual comprehensive foot exam',
+          'Annual dilated eye exam',
+          'Kidney function monitoring (eGFR, urine albumin)',
+          'Review blood glucose monitoring logs',
+          'Assess for diabetic complications'
+        ]
+      });
+    }
+
+    // Analyze abnormal test results
+    const abnormalTests = tests.filter(t => t.is_abnormal === 'Yes');
+    
+    if (abnormalTests.length > 0) {
+      const criticalTests = abnormalTests.filter(t => {
+        const name = t.test_name?.toLowerCase() || '';
+        return name.includes('creatinine') || name.includes('potassium') || 
+               name.includes('glucose') || name.includes('hemoglobin');
+      });
+
+      if (criticalTests.length > 0) {
+        recs.push({
+          category: 'Lab Follow-up',
+          priority: 'high',
+          icon: '⚠️',
+          title: 'Abnormal Lab Results Require Attention',
+          description: `${abnormalTests.length} abnormal test results found. ${criticalTests.length} may require immediate attention.`,
+          actions: [
+            'Review all abnormal results with physician',
+            'Repeat testing as clinically indicated',
+            'Consider specialist referral if needed',
+            'Adjust medications based on results'
+          ],
+          details: criticalTests.map(t => 
+            `${t.test_name}: ${t.result_value} ${t.result_unit || ''} (Normal: ${t.normal_range_low || '?'}-${t.normal_range_high || '?'})`
+          )
+        });
+      } else {
+        recs.push({
+          category: 'Lab Follow-up',
+          priority: 'medium',
+          icon: '🔬',
+          title: 'Lab Results Review Needed',
+          description: `${abnormalTests.length} abnormal test results require follow-up.`,
+          actions: [
+            'Discuss results with patient',
+            'Determine if repeat testing needed',
+            'Document clinical decision-making'
+          ]
+        });
+      }
+    }
+
+    // Check for cardiovascular risk
+    const hasCardiacCondition = diags.some(d => {
+      const desc = d.diagnosis_description?.toLowerCase() || '';
+      return desc.includes('hypertension') || desc.includes('heart') || 
+             desc.includes('cardiac') || desc.includes('coronary');
+    });
+
+    if (hasCardiacCondition) {
+      recs.push({
+        category: 'Cardiovascular Health',
+        priority: 'medium',
+        icon: '❤️',
+        title: 'Cardiovascular Risk Management',
+        description: 'Patient has cardiovascular conditions requiring proactive management.',
+        actions: [
+          'Assess cardiovascular risk factors',
+          'Monitor blood pressure regularly',
+          'Review lipid panel results',
+          'Encourage lifestyle modifications',
+          'Consider cardiology referral if not already established'
+        ]
+      });
+    }
+
+    // General preventive care recommendations
+    recs.push({
+      category: 'Preventive Care',
+      priority: 'low',
+      icon: '🛡️',
+      title: 'Routine Preventive Health Maintenance',
+      description: 'Ensure patient is up-to-date with age-appropriate preventive care.',
+      actions: [
+        'Review immunization status',
+        'Age-appropriate cancer screenings',
+        'Annual wellness visit',
+        'Lifestyle counseling (diet, exercise, smoking cessation)'
+      ]
+    });
+
+    // Check for polypharmacy in elderly
+    if (currentMeds.length >= 5) {
+      recs.push({
+        category: 'Medication Safety',
+        priority: 'medium',
+        icon: '⚕️',
+        title: 'Polypharmacy Assessment',
+        description: 'Multiple medications increase risk of adverse effects and interactions.',
+        actions: [
+          'Deprescribing review - assess each medication necessity',
+          'Check for potentially inappropriate medications',
+          'Simplify medication regimen if possible',
+          'Ensure patient understanding of each medication'
+        ]
+      });
+    }
+
+    // Sort by priority
+    const priorityOrder = { 'high': 0, 'medium': 1, 'low': 2 };
+    return recs.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+  };
+
+  if (loading) return <div className="loading">Analyzing patient data and generating recommendations...</div>;
+
+  return (
+    <div className="container">
+      <Link to={`/document/${documentId}`} className="back-link">← Back to Dashboard</Link>
+      
+      <div className="page-header">
+        <h2>🎯 Next Steps - AI-Powered Recommendations</h2>
+        <p className="subtitle">
+          Based on analysis of {medications.length} medications, {diagnoses.length} diagnoses, 
+          and {testResults.length} test results
+        </p>
+      </div>
+
+      <div className="summary-cards">
+        <div className="summary-card">
+          <div className="summary-icon">💊</div>
+          <div className="summary-content">
+            <h3>{medications.filter(m => m.is_current === 'Yes').length}</h3>
+            <p>Current Medications</p>
+          </div>
+        </div>
+        <div className="summary-card">
+          <div className="summary-icon">🩺</div>
+          <div className="summary-content">
+            <h3>{diagnoses.length}</h3>
+            <p>Active Diagnoses</p>
+          </div>
+        </div>
+        <div className="summary-card">
+          <div className="summary-icon">⚠️</div>
+          <div className="summary-content">
+            <h3>{testResults.filter(t => t.is_abnormal === 'Yes').length}</h3>
+            <p>Abnormal Results</p>
+          </div>
+        </div>
+        <div className="summary-card">
+          <div className="summary-icon">🎯</div>
+          <div className="summary-content">
+            <h3>{recommendations.length}</h3>
+            <p>Recommendations</p>
+          </div>
+        </div>
+      </div>
+
+      {recommendations.length === 0 ? (
+        <div className="info-message">
+          <p>✅ No specific recommendations at this time.</p>
+          <p className="subtitle">Continue with routine care and monitoring.</p>
+        </div>
+      ) : (
+        <div className="recommendations-container">
+          {recommendations.map((rec, idx) => (
+            <div key={idx} className={`recommendation-card priority-${rec.priority}`}>
+              <div className="rec-header">
+                <div className="rec-icon">{rec.icon}</div>
+                <div className="rec-title-section">
+                  <h3>{rec.title}</h3>
+                  <span className={`priority-badge priority-${rec.priority}`}>
+                    {rec.priority.toUpperCase()} PRIORITY
+                  </span>
+                </div>
+              </div>
+              
+              <div className="rec-category">{rec.category}</div>
+              <p className="rec-description">{rec.description}</p>
+              
+              <div className="rec-actions">
+                <h4>Recommended Actions:</h4>
+                <ul>
+                  {rec.actions.map((action, i) => (
+                    <li key={i}>{action}</li>
+                  ))}
+                </ul>
+              </div>
+
+              {rec.details && rec.details.length > 0 && (
+                <div className="rec-details">
+                  <h4>Details:</h4>
+                  <ul>
+                    {rec.details.map((detail, i) => (
+                      <li key={i}>{detail}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="disclaimer">
+        <h4>⚕️ Clinical Disclaimer</h4>
+        <p>
+          These recommendations are generated by AI analysis and are intended to support clinical 
+          decision-making, not replace it. All recommendations should be reviewed by a qualified 
+          healthcare professional and tailored to the individual patient's needs, circumstances, 
+          and current clinical guidelines.
+        </p>
+      </div>
     </div>
   );
 }

@@ -202,10 +202,15 @@ Estimated monthly cost for low traffic: **$0-5/month**
 
 ## Your HealthAI Amplify URL
 
-Once deployed, update this with your actual URL:
+✅ **Live Application:**
 
 ```
-🌐 Production: https://main.xxxxxx.amplifyapp.com
+🌐 Production: https://master.d2u43pjwtpmlz9.amplifyapp.com
 ```
 
-Add this URL to your README.md and share with users!
+🎉 Your HealthAI application is now live and accessible to users!
+
+### Share Your Application:
+- Add this URL to your README.md
+- Share with healthcare providers and administrators
+- Set up custom domain for professional branding (optional)

@@ -2,6 +2,8 @@
 
 React-based medical document viewer for the HealthAI system.
 
+🌐 **Live Application**: [https://master.d2u43pjwtpmlz9.amplifyapp.com](https://master.d2u43pjwtpmlz9.amplifyapp.com)
+
 ## Setup
 
 1. Install dependencies:

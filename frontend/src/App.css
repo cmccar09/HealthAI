@@ -777,3 +777,259 @@ body {
     break-inside: avoid;
   }
 }
+/* Next Steps Page Styles */
+.highlight-card {
+  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  color: white;
+}
+
+.highlight-card:hover {
+  background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+  transform: translateY(-4px);
+}
+
+.highlight-card .card-icon {
+  font-size: 3rem;
+}
+
+.highlight-card h3,
+.highlight-card p {
+  color: white;
+}
+
+.summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 3rem;
+}
+
+.summary-card {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  border-left: 4px solid var(--primary-color);
+  transition: all 0.3s ease;
+}
+
+.summary-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.summary-icon {
+  font-size: 2.5rem;
+}
+
+.summary-content h3 {
+  font-size: 2rem;
+  color: var(--primary-color);
+  margin-bottom: 0.25rem;
+}
+
+.summary-content p {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.recommendations-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.recommendation-card {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: var(--shadow-md);
+  border-left: 6px solid;
+  transition: all 0.3s ease;
+}
+
+.recommendation-card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateX(4px);
+}
+
+.priority-high {
+  border-left-color: var(--danger-color);
+  background: linear-gradient(to right, rgba(239, 68, 68, 0.05) 0%, white 20%);
+}
+
+.priority-medium {
+  border-left-color: var(--warning-color);
+  background: linear-gradient(to right, rgba(245, 158, 11, 0.05) 0%, white 20%);
+}
+
+.priority-low {
+  border-left-color: var(--success-color);
+  background: linear-gradient(to right, rgba(16, 185, 129, 0.05) 0%, white 20%);
+}
+
+.rec-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.rec-icon {
+  font-size: 3rem;
+  flex-shrink: 0;
+}
+
+.rec-title-section {
+  flex: 1;
+}
+
+.rec-title-section h3 {
+  font-size: 1.5rem;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.priority-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.priority-badge.priority-high {
+  background-color: var(--danger-color);
+  color: white;
+}
+
+.priority-badge.priority-medium {
+  background-color: var(--warning-color);
+  color: white;
+}
+
+.priority-badge.priority-low {
+  background-color: var(--success-color);
+  color: white;
+}
+
+.rec-category {
+  display: inline-block;
+  background: var(--bg-light);
+  color: var(--text-secondary);
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.rec-description {
+  color: var(--text-primary);
+  font-size: 1rem;
+  line-height: 1.6;
+  margin-bottom: 1.5rem;
+}
+
+.rec-actions,
+.rec-details {
+  margin-top: 1.5rem;
+}
+
+.rec-actions h4,
+.rec-details h4 {
+  color: var(--text-primary);
+  font-size: 1.1rem;
+  margin-bottom: 0.75rem;
+}
+
+.rec-actions ul,
+.rec-details ul {
+  list-style: none;
+  padding: 0;
+}
+
+.rec-actions ul li,
+.rec-details ul li {
+  padding: 0.75rem;
+  background: var(--bg-light);
+  margin-bottom: 0.5rem;
+  border-radius: 6px;
+  position: relative;
+  padding-left: 2.5rem;
+}
+
+.rec-actions ul li:before {
+  content: "✓";
+  position: absolute;
+  left: 1rem;
+  color: var(--primary-color);
+  font-weight: bold;
+}
+
+.rec-details ul li:before {
+  content: "•";
+  position: absolute;
+  left: 1rem;
+  color: var(--warning-color);
+  font-weight: bold;
+}
+
+.disclaimer {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border: 2px solid var(--warning-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-top: 2rem;
+}
+
+.disclaimer h4 {
+  color: #92400e;
+  margin-bottom: 0.75rem;
+  font-size: 1.1rem;
+}
+
+.disclaimer p {
+  color: #78350f;
+  line-height: 1.6;
+  font-size: 0.9rem;
+}
+/* View Image Button for Test Results */
+.view-image-btn {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-hover) 100%);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.view-image-btn:hover {
+  background: linear-gradient(135deg, var(--primary-hover) 0%, #1e40af 100%);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.view-image-btn:active {
+  transform: translateY(0);
+}
+
+.no-image {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* Diagnosis View Button */
+.diagnosis-view-btn {
+  margin-top: 1rem;
+  width: 100%;
+}

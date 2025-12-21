@@ -2,6 +2,8 @@
 
 Intelligent medical document processing platform using AWS Lambda, Claude AI, and React.
 
+🌐 **Live Demo**: [https://master.d2u43pjwtpmlz9.amplifyapp.com](https://master.d2u43pjwtpmlz9.amplifyapp.com)
+
 ## Architecture
 
 ```
@@ -59,9 +61,13 @@ React Frontend (AWS Amplify)
 
 ## Quick Start
 
+### Try the Live Demo
+Visit [https://master.d2u43pjwtpmlz9.amplifyapp.com](https://master.d2u43pjwtpmlz9.amplifyapp.com)
+
+### Process Documents
 1. Upload PDF to `health-ai-upload` bucket
 2. System automatically processes document
-3. View results in React frontend
+3. View results in React frontend dashboard
 
 ## License
 

@@ -13,10 +13,10 @@ s3_client = boto3.client('s3')
 dynamodb = boto3.resource('dynamodb')
 bedrock_client = boto3.client('bedrock-runtime', region_name='us-east-1')
 
-# Throttling configuration
-MAX_RETRIES = 5
-BASE_BACKOFF = 1  # seconds
-MAX_BACKOFF = 60  # seconds
+# Throttling configuration - AGGRESSIVE delays to handle rate limits
+MAX_RETRIES = 8  # More retries with longer delays
+BASE_BACKOFF = 3  # Start with 3 seconds (was 1)
+MAX_BACKOFF = 120  # Allow up to 2 minutes (was 60)
 MAX_IMAGE_SIZE = 4.5 * 1024 * 1024  # 4.5 MB (safety margin below 5MB limit)
 
 PAGES_TABLE = os.environ['PAGES_TABLE']
@@ -28,7 +28,15 @@ CATEGORIES_TABLE = os.environ['CATEGORIES_TABLE']
 DOCUMENTS_TABLE = os.environ['DOCUMENTS_TABLE']
 
 # Ultra-efficient system prompt with caching
-MEDINGEST_SYSTEM_PROMPT = """You are a medical data extraction AI. Analyze medical documents and extract structured data.
+MEDINGEST_SYSTEM_PROMPT = """You are an expert medical professional and clinical data specialist. Your role is to thoroughly review patient medical histories and extract comprehensive clinical information with precision.
+
+Your expertise includes:
+- Clinical medicine across all specialties
+- Medical documentation standards
+- Provider credentialing and specialization
+- Treatment protocols and care pathways
+- Medication management
+- Diagnostic interpretation
 
 CRITICAL: You MUST respond with ONLY valid JSON matching the requested structure. No explanations, no markdown, no code blocks.
 
@@ -93,6 +101,11 @@ def lambda_handler(event, context):
             tests = extracted_data.get('test_results', [])
             if tests:
                 store_test_results(document_id, page_id, tests)
+            
+            # Store providers information
+            providers = extracted_data.get('providers', [])
+            if providers:
+                store_providers(document_id, page_id, page_number, providers)
             
             # Update page status
             pages_table = dynamodb.Table(PAGES_TABLE)
@@ -164,7 +177,8 @@ def lambda_handler(event, context):
 
 def call_claude(prompt, image_base64):
     """
-    Token-efficient Claude API call with exponential backoff and jitter.
+    Ultra-efficient Claude API call with prompt caching (90% cost reduction).
+    Uses cached system prompt across all pages for massive savings.
     """
     
     for attempt in range(MAX_RETRIES):
@@ -175,13 +189,13 @@ def call_claude(prompt, image_base64):
                 accept='application/json',
                 body=json.dumps({
                     'anthropic_version': 'bedrock-2023-05-31',
-                    'max_tokens': 2000,
-                    'temperature': 0,
+                    'max_tokens': 1500,  # Reduced from 2000 - JSON responses are typically <1500 tokens
+                    'temperature': 0,  # Deterministic for consistency
                     'system': [
                         {
                             'type': 'text',
                             'text': MEDINGEST_SYSTEM_PROMPT,
-                            'cache_control': {'type': 'ephemeral'}
+                            'cache_control': {'type': 'ephemeral'}  # Cache system prompt - 90% cost savings!
                         }
                     ],
                     'messages': [
@@ -208,6 +222,9 @@ def call_claude(prompt, image_base64):
             
             response_body = json.loads(response['body'].read())
             result_text = response_body['content'][0]['text'].strip()
+            
+            # Small delay after successful call to prevent rate limiting
+            time.sleep(0.5)
             
             print(f"Claude response length: {len(result_text)} chars")
             if len(result_text) < 500:
@@ -259,30 +276,17 @@ def extract_comprehensive_data(image_base64, page_number):
     
     # First page gets patient data, all pages get medical content
     if page_number == 1:
-        prompt = """Analyze this medical document page and extract data in this EXACT JSON format:
+        prompt = """Extract comprehensive clinical data in this EXACT JSON format:
 
-{
-  "patient_data": {"patient_first_name":"","patient_last_name":"","patient_dob":"","patient_ssn":"","patient_mrn":"","medical_facility":"","gender":"","blood_type":"","email":"","phone_number":"","address_line1":"","city":"","state":"","postal_code":"","country":"","emergency_contact_name":"","emergency_contact_phone":"","allergies":"","document_date":""},
-  "categories": [{"name":"Cardiology","reason":"why this category"}],
-  "medications": [{"medication_name":"","dosage":"","frequency":"","start_date":"","is_current":"yes/no","notes":""}],
-  "diagnoses": [{"diagnosis_description":"","diagnosis_code":"","diagnosed_date":"","is_current":"yes/no","diagnosing_doctor_first_name":"","diagnosing_doctor_last_name":"","diagnosing_facility_name":"","notes":""}],
-  "test_results": [{"test_name":"","test_date":"","result_value":"","result_unit":"","is_abnormal":"yes/no","normal_range_low":"","normal_range_high":"","notes":""}]
-}
+{"patient_data":{"patient_first_name":"","patient_last_name":"","patient_dob":"","patient_ssn":"","patient_mrn":"","medical_facility":"","gender":"","blood_type":"","email":"","phone_number":"","address_line1":"","city":"","state":"","postal_code":"","country":"","emergency_contact_name":"","emergency_contact_phone":"","allergies":"","document_date":""},"categories":[{"name":"Cardiology","reason":""}],"medications":[{"medication_name":"","dosage":"","frequency":"","route":"","start_date":"","end_date":"","is_current":"yes/no","prescribing_doctor":"","notes":""}],"diagnoses":[{"diagnosis_description":"","diagnosis_code":"","diagnosed_date":"","is_current":"yes/no","diagnosing_doctor_first_name":"","diagnosing_doctor_last_name":"","diagnosing_doctor_specialty":"","diagnosing_facility_name":"","specialty_relevance":"","notes":""}],"test_results":[{"test_name":"","test_date":"","result_value":"","result_unit":"","is_abnormal":"yes/no","normal_range_low":"","normal_range_high":"","ordering_doctor":"","notes":""}],"providers":[{"doctor_first_name":"","doctor_last_name":"","specialty":"","role_in_care":"","facility":"","contact_info":""}]}
 
-Category options: Cardiology, Dermatology, Emergency, Endocrinology, Gastroenterology, Hematology, Hospitalization, Internal Medicine, Labs, Neurology, Oncology, Orthopedics, Pathology, Radiology, Surgery, Other.
-Use empty arrays [] if no data found. Respond with ONLY the JSON, nothing else."""
+RULES: Extract ONLY data explicitly on THIS page. Diagnoses: only if detailed/actively addressed (not PMH mentions). Specialty_relevance: assess if doctor specialty matches diagnosis (High/Medium/Low + reason). Categories: Cardiology|Dermatology|Emergency|Endocrinology|Gastroenterology|Hematology|Hospitalization|Internal Medicine|Labs|Neurology|Oncology|Orthopedics|Pathology|Radiology|Surgery|Other. Empty arrays [] if none."""
     else:
-        prompt = """Analyze this medical document page and extract data in this EXACT JSON format:
+        prompt = """Extract clinical data in this EXACT JSON format:
 
-{
-  "categories": [{"name":"Cardiology","reason":"why this category"}],
-  "medications": [{"medication_name":"","dosage":"","frequency":"","start_date":"","is_current":"yes/no","notes":""}],
-  "diagnoses": [{"diagnosis_description":"","diagnosis_code":"","diagnosed_date":"","is_current":"yes/no","diagnosing_doctor_first_name":"","diagnosing_doctor_last_name":"","diagnosing_facility_name":"","notes":""}],
-  "test_results": [{"test_name":"","test_date":"","result_value":"","result_unit":"","is_abnormal":"yes/no","normal_range_low":"","normal_range_high":"","notes":""}]
-}
+{"categories":[{"name":"Cardiology","reason":""}],"medications":[{"medication_name":"","dosage":"","frequency":"","route":"","start_date":"","end_date":"","is_current":"yes/no","prescribing_doctor":"","notes":""}],"diagnoses":[{"diagnosis_description":"","diagnosis_code":"","diagnosed_date":"","is_current":"yes/no","diagnosing_doctor_first_name":"","diagnosing_doctor_last_name":"","diagnosing_doctor_specialty":"","diagnosing_facility_name":"","specialty_relevance":"","notes":""}],"test_results":[{"test_name":"","test_date":"","result_value":"","result_unit":"","is_abnormal":"yes/no","normal_range_low":"","normal_range_high":"","ordering_doctor":"","notes":""}],"providers":[{"doctor_first_name":"","doctor_last_name":"","specialty":"","role_in_care":"","facility":"","contact_info":""}]}
 
-Category options: Cardiology, Dermatology, Emergency, Endocrinology, Gastroenterology, Hematology, Hospitalization, Internal Medicine, Labs, Neurology, Oncology, Orthopedics, Pathology, Radiology, Surgery, Other.
-Use empty arrays [] if no data found. Respond with ONLY the JSON, nothing else."""
+RULES: Extract ONLY data explicitly on THIS page. Diagnoses: only if detailed/actively addressed (not PMH mentions). Specialty_relevance: assess if doctor specialty matches diagnosis (High/Medium/Low + reason). Categories: Cardiology|Dermatology|Emergency|Endocrinology|Gastroenterology|Hematology|Hospitalization|Internal Medicine|Labs|Neurology|Oncology|Orthopedics|Pathology|Radiology|Surgery|Other. Empty arrays [] if none."""
     
     result = call_claude(prompt, image_base64)
     try:
@@ -425,7 +429,7 @@ def store_medications(document_id, page_id, medications):
 
 
 def store_diagnoses(document_id, page_id, diagnoses):
-    """Store diagnoses in DynamoDB."""
+    """Store diagnoses in DynamoDB with doctor specialty and relevance."""
     
     diagnoses_table = dynamodb.Table(DIAGNOSES_TABLE)
     documents_table = dynamodb.Table(DOCUMENTS_TABLE)
@@ -447,7 +451,9 @@ def store_diagnoses(document_id, page_id, diagnoses):
                 'is_current': diag.get('is_current', 'Unknown'),
                 'diagnosing_doctor_first_name': diag.get('diagnosing_doctor_first_name', 'Unknown'),
                 'diagnosing_doctor_last_name': diag.get('diagnosing_doctor_last_name', 'Unknown'),
+                'diagnosing_doctor_specialty': diag.get('diagnosing_doctor_specialty', 'Unknown'),
                 'diagnosing_facility_name': diag.get('diagnosing_facility_name', 'Unknown'),
+                'specialty_relevance': diag.get('specialty_relevance', 'Unknown'),
                 'notes': diag.get('notes', ''),
                 'created_timestamp': int(datetime.utcnow().timestamp())
             }
@@ -482,3 +488,46 @@ def store_test_results(document_id, page_id, tests):
                 'created_timestamp': int(datetime.utcnow().timestamp())
             }
         )
+
+def store_providers(document_id, page_id, page_number, providers):
+    """Store healthcare provider information as document metadata."""
+    
+    documents_table = dynamodb.Table(DOCUMENTS_TABLE)
+    
+    # Get existing providers list or create new
+    doc_response = documents_table.get_item(Key={'document_id': document_id})
+    existing_providers = doc_response.get('Item', {}).get('providers', [])
+    
+    # Add new providers with page reference
+    for provider in providers:
+        provider_entry = {
+            'first_name': provider.get('doctor_first_name', 'Unknown'),
+            'last_name': provider.get('doctor_last_name', 'Unknown'),
+            'specialty': provider.get('specialty', 'Unknown'),
+            'role_in_care': provider.get('role_in_care', 'Unknown'),
+            'facility': provider.get('facility', 'Unknown'),
+            'contact_info': provider.get('contact_info', 'Unknown'),
+            'page_number': page_number,
+            'page_id': page_id
+        }
+        
+        # Check if provider already exists (avoid duplicates)
+        duplicate = False
+        for existing in existing_providers:
+            if (existing.get('first_name') == provider_entry['first_name'] and
+                existing.get('last_name') == provider_entry['last_name'] and
+                existing.get('specialty') == provider_entry['specialty']):
+                duplicate = True
+                break
+        
+        if not duplicate:
+            existing_providers.append(provider_entry)
+    
+    # Update document with provider roster
+    documents_table.update_item(
+        Key={'document_id': document_id},
+        UpdateExpression='SET providers = :providers',
+        ExpressionAttributeValues={':providers': existing_providers}
+    )
+    
+    print(f"Stored {len(providers)} providers for page {page_number}")
