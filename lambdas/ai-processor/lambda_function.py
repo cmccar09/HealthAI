@@ -79,8 +79,17 @@ def lambda_handler(event, context):
             # Store patient data (first page only)
             if page_number == 1 and extracted_data.get('patient_data'):
                 patient_data = extracted_data['patient_data']
-                if patient_data.get('patient_first_name') != 'Unknown':
+                # Store patient data if we have at least a name OR MRN OR any identifying info
+                has_identifying_info = (
+                    patient_data.get('patient_first_name') or 
+                    patient_data.get('patient_last_name') or
+                    patient_data.get('patient_mrn') or
+                    patient_data.get('patient_ssn')
+                )
+                if has_identifying_info:
                     store_patient_data(document_id, patient_data)
+                else:
+                    print(f"No identifying patient info found on page 1, skipping patient record")
             
             # Store categories
             categories = extracted_data.get('categories', [])
@@ -280,7 +289,7 @@ def extract_comprehensive_data(image_base64, page_number):
 
 {"patient_data":{"patient_first_name":"","patient_last_name":"","patient_dob":"","patient_ssn":"","patient_mrn":"","medical_facility":"","gender":"","blood_type":"","email":"","phone_number":"","address_line1":"","city":"","state":"","postal_code":"","country":"","emergency_contact_name":"","emergency_contact_phone":"","allergies":"","document_date":""},"categories":[{"name":"Cardiology","reason":""}],"medications":[{"medication_name":"","dosage":"","frequency":"","route":"","start_date":"","end_date":"","is_current":"yes/no","prescribing_doctor":"","notes":""}],"diagnoses":[{"diagnosis_description":"","diagnosis_code":"","diagnosed_date":"","is_current":"yes/no","diagnosing_doctor_first_name":"","diagnosing_doctor_last_name":"","diagnosing_doctor_specialty":"","diagnosing_facility_name":"","specialty_relevance":"","notes":""}],"test_results":[{"test_name":"","test_date":"","result_value":"","result_unit":"","is_abnormal":"yes/no","normal_range_low":"","normal_range_high":"","ordering_doctor":"","notes":""}],"providers":[{"doctor_first_name":"","doctor_last_name":"","specialty":"","role_in_care":"","facility":"","contact_info":""}]}
 
-RULES: Extract ONLY data explicitly on THIS page. Diagnoses: only if detailed/actively addressed (not PMH mentions). Specialty_relevance: assess if doctor specialty matches diagnosis (High/Medium/Low + reason). Categories: Cardiology|Dermatology|Emergency|Endocrinology|Gastroenterology|Hematology|Hospitalization|Internal Medicine|Labs|Neurology|Oncology|Orthopedics|Pathology|Radiology|Surgery|Other. Empty arrays [] if none."""
+RULES: Extract ONLY data explicitly on THIS page. For patient_data: look carefully for patient name anywhere on page (header, footer, demographics section, form fields). Diagnoses: only if detailed/actively addressed (not PMH mentions). Specialty_relevance: assess if doctor specialty matches diagnosis (High/Medium/Low + reason). Categories: Cardiology|Dermatology|Emergency|Endocrinology|Gastroenterology|Hematology|Hospitalization|Internal Medicine|Labs|Neurology|Oncology|Orthopedics|Pathology|Radiology|Surgery|Other. Empty arrays [] if none."""
     else:
         prompt = """Extract clinical data in this EXACT JSON format:
 
