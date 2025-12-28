@@ -1604,16 +1604,14 @@ function DoctorsPage() {
     try {
       const firstName = provider.doctor_first_name || '';
       const lastName = provider.doctor_last_name || '';
-      const state = provider.facility?.match(/\b[A-Z]{2}\b/)?.[0] || ''; // Try to extract state from facility
       
+      // Use our DynamoDB-backed NPI lookup API
       const params = new URLSearchParams({
-        version: '2.1',
-        first_name: firstName,
-        last_name: lastName,
-        ...(state && { state })
+        last_name: lastName.toUpperCase(),
+        ...(firstName && { first_name: firstName })
       });
 
-      const response = await fetch(`https://npiregistry.cms.hhs.gov/api/?${params}`);
+      const response = await fetch(`https://m555q9j31d.execute-api.us-east-1.amazonaws.com/prod/npi-lookup?${params}`);
       const data = await response.json();
 
       if (data.results && data.results.length > 0) {
@@ -1633,7 +1631,7 @@ function DoctorsPage() {
       } else {
         setNpiData(prev => ({
           ...prev,
-          [index]: { found: false, message: 'No NPI record found for this provider' }
+          [index]: { found: false, message: 'No NPI record found for this provider in database' }
         }));
       }
     } catch (error) {
