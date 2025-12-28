@@ -1282,3 +1282,217 @@ body {
   margin-top: 1rem;
   width: 100%;
 }
+/* Doctors Page */
+.doctors-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));
+  gap: 2rem;
+}
+
+.doctor-card {
+  background: var(--bg-white);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: all 0.2s;
+}
+
+.doctor-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-color: var(--primary-color);
+}
+
+.doctor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid var(--border-color);
+}
+
+.doctor-header h3 {
+  margin: 0 0 0.5rem 0;
+  color: var(--text-primary);
+  font-size: 1.25rem;
+}
+
+.doctor-specialty-badge {
+  display: inline-block;
+  background: var(--primary-color);
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.npi-search-btn {
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+
+.npi-search-btn:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.npi-search-btn:disabled {
+  background: #10b981;
+  cursor: default;
+}
+
+.doctor-info {
+  margin: 1rem 0;
+}
+
+.doctor-info p {
+  margin: 0.5rem 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.doctor-info strong {
+  color: var(--text-primary);
+  margin-right: 0.5rem;
+}
+
+/* Relevance Analysis */
+.relevance-analysis {
+  margin: 1rem 0;
+  padding: 1rem;
+  border-radius: 8px;
+  border: 2px solid;
+}
+
+.relevance-analysis h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.relevance-green {
+  background: #d1fae5;
+  border-color: #10b981;
+}
+
+.relevance-yellow {
+  background: #fef3c7;
+  border-color: #f59e0b;
+}
+
+.relevance-red {
+  background: #fee2e2;
+  border-color: #ef4444;
+}
+
+.relevance-badge {
+  margin: 0.5rem 0;
+}
+
+.badge-green {
+  background: #10b981;
+  color: white;
+  padding: 0.375rem 0.875rem;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.badge-yellow {
+  background: #f59e0b;
+  color: white;
+  padding: 0.375rem 0.875rem;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.badge-red {
+  background: #ef4444;
+  color: white;
+  padding: 0.375rem 0.875rem;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.diagnosis-count {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+/* NPI Results */
+.npi-results {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #eff6ff;
+  border: 1px solid #3b82f6;
+  border-radius: 8px;
+}
+
+.npi-results h4 {
+  margin: 0 0 1rem 0;
+  color: #1e40af;
+  font-size: 1rem;
+}
+
+.npi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.npi-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.npi-item.full-width {
+  grid-column: 1 / -1;
+}
+
+.npi-label {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.npi-value {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.taxonomy-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.taxonomy-badge {
+  background: #3b82f6;
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.npi-not-found {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #fee2e2;
+  border: 1px solid #ef4444;
+  border-radius: 8px;
+  color: #991b1b;
+}

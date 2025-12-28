@@ -46,6 +46,7 @@ function App() {
           <Route path="/document/:documentId/diagnoses" element={<DiagnosesPage />} />
           <Route path="/document/:documentId/tests" element={<TestResultsPage />} />
           <Route path="/document/:documentId/images" element={<ImageGallery />} />
+          <Route path="/document/:documentId/doctors" element={<DoctorsPage />} />
           <Route path="/document/:documentId/next-steps" element={<NextStepsPage />} />
         </Routes>
       </div>
@@ -216,6 +217,12 @@ function DocumentDashboard() {
           <div className="card-icon">🖼️</div>
           <h3>Page Images</h3>
           <p className="stat">{stats.pages} pages with categories</p>
+        </Link>
+
+        <Link to={`/document/${documentId}/doctors`} className="dashboard-card">
+          <div className="card-icon">👨‍⚕️</div>
+          <h3>Healthcare Providers</h3>
+          <p>Verify doctors and analyze specialty relevance</p>
         </Link>
 
         <Link to={`/document/${documentId}/next-steps`} className="dashboard-card highlight-card">
@@ -1548,6 +1555,260 @@ function ImageGallery() {
               )}
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Doctors Page - Healthcare Provider Verification
+function DoctorsPage() {
+  const { documentId } = useParams();
+  const [providers, setProviders] = useState([]);
+  const [diagnoses, setDiagnoses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchingNPI, setSearchingNPI] = useState({});
+  const [npiData, setNpiData] = useState({});
+
+  useEffect(() => {
+    fetchData();
+  }, [documentId]);
+
+  const fetchData = async () => {
+    try {
+      const [providersRes, diagnosesRes] = await Promise.all([
+        docClient.send(new ScanCommand({
+          TableName: 'HealthAI-Providers',
+          FilterExpression: 'document_id = :docId',
+          ExpressionAttributeValues: { ':docId': documentId }
+        })),
+        docClient.send(new ScanCommand({
+          TableName: 'HealthAI-Diagnoses',
+          FilterExpression: 'document_id = :docId',
+          ExpressionAttributeValues: { ':docId': documentId }
+        }))
+      ]);
+
+      setProviders(providersRes.Items || []);
+      setDiagnoses(diagnosesRes.Items || []);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const searchNPI = async (provider, index) => {
+    setSearchingNPI(prev => ({ ...prev, [index]: true }));
+    
+    try {
+      const firstName = provider.doctor_first_name || '';
+      const lastName = provider.doctor_last_name || '';
+      const state = provider.facility?.match(/\b[A-Z]{2}\b/)?.[0] || ''; // Try to extract state from facility
+      
+      const params = new URLSearchParams({
+        version: '2.1',
+        first_name: firstName,
+        last_name: lastName,
+        ...(state && { state })
+      });
+
+      const response = await fetch(`https://npiregistry.cms.hhs.gov/api/?${params}`);
+      const data = await response.json();
+
+      if (data.results && data.results.length > 0) {
+        const npiResult = data.results[0];
+        setNpiData(prev => ({
+          ...prev,
+          [index]: {
+            npi: npiResult.number,
+            name: `${npiResult.basic.first_name} ${npiResult.basic.last_name}`,
+            credential: npiResult.basic.credential,
+            gender: npiResult.basic.gender,
+            addresses: npiResult.addresses,
+            taxonomies: npiResult.taxonomies,
+            found: true
+          }
+        }));
+      } else {
+        setNpiData(prev => ({
+          ...prev,
+          [index]: { found: false, message: 'No NPI record found for this provider' }
+        }));
+      }
+    } catch (error) {
+      console.error('Error searching NPI:', error);
+      setNpiData(prev => ({
+        ...prev,
+        [index]: { found: false, message: 'Error searching NPI database' }
+      }));
+    } finally {
+      setSearchingNPI(prev => ({ ...prev, [index]: false }));
+    }
+  };
+
+  const analyzeRelevance = (provider) => {
+    // Find diagnoses made by this doctor
+    const doctorDiagnoses = diagnoses.filter(diag => {
+      const diagDoctor = `${diag.diagnosing_doctor_first_name} ${diag.diagnosing_doctor_last_name}`.trim().toLowerCase();
+      const providerName = `${provider.doctor_first_name} ${provider.doctor_last_name}`.trim().toLowerCase();
+      return diagDoctor === providerName;
+    });
+
+    if (doctorDiagnoses.length === 0) {
+      return { relevant: 'Unknown', reason: 'No diagnoses found for this provider', count: 0 };
+    }
+
+    // Check if doctor's specialty matches the diagnoses
+    const specialty = (provider.specialty || '').toLowerCase();
+    let relevantCount = 0;
+    let totalCount = doctorDiagnoses.length;
+
+    doctorDiagnoses.forEach(diag => {
+      const specialty_relevance = (diag.specialty_relevance || '').toLowerCase();
+      if (specialty_relevance.includes('high')) {
+        relevantCount++;
+      }
+    });
+
+    const relevancePercent = (relevantCount / totalCount) * 100;
+
+    if (relevancePercent >= 75) {
+      return { 
+        relevant: 'High', 
+        reason: `${relevantCount}/${totalCount} diagnoses match specialty`,
+        count: totalCount,
+        color: 'green'
+      };
+    } else if (relevancePercent >= 50) {
+      return { 
+        relevant: 'Medium', 
+        reason: `${relevantCount}/${totalCount} diagnoses match specialty`,
+        count: totalCount,
+        color: 'yellow'
+      };
+    } else {
+      return { 
+        relevant: 'Low', 
+        reason: `Only ${relevantCount}/${totalCount} diagnoses match specialty`,
+        count: totalCount,
+        color: 'red'
+      };
+    }
+  };
+
+  if (loading) return <div className="loading">Loading healthcare providers...</div>;
+
+  return (
+    <div className="container">
+      <Link to={`/document/${documentId}`} className="back-link">← Back to Dashboard</Link>
+      
+      <div className="page-header">
+        <h2>👨‍⚕️ Healthcare Providers & NPI Verification</h2>
+        <p className="subtitle">
+          {providers.length} provider(s) found in document • Verify credentials via NPI Registry
+        </p>
+      </div>
+
+      {providers.length === 0 ? (
+        <div className="info-message">
+          No healthcare providers found in this document.
+        </div>
+      ) : (
+        <div className="doctors-grid">
+          {providers.map((provider, idx) => {
+            const relevance = analyzeRelevance(provider);
+            const npi = npiData[idx];
+
+            return (
+              <div key={idx} className="doctor-card">
+                <div className="doctor-header">
+                  <div>
+                    <h3>Dr. {provider.doctor_first_name} {provider.doctor_last_name}</h3>
+                    {provider.specialty && (
+                      <span className="doctor-specialty-badge">{provider.specialty}</span>
+                    )}
+                  </div>
+                  <button 
+                    className="npi-search-btn"
+                    onClick={() => searchNPI(provider, idx)}
+                    disabled={searchingNPI[idx] || npi}
+                  >
+                    {searchingNPI[idx] ? '🔍 Searching...' : npi ? '✓ Verified' : '🔍 Verify NPI'}
+                  </button>
+                </div>
+
+                <div className="doctor-info">
+                  {provider.role_in_care && (
+                    <p><strong>Role:</strong> {provider.role_in_care}</p>
+                  )}
+                  {provider.facility && (
+                    <p><strong>Facility:</strong> {provider.facility}</p>
+                  )}
+                  {provider.contact_info && (
+                    <p><strong>Contact:</strong> {provider.contact_info}</p>
+                  )}
+                </div>
+
+                {relevance.count > 0 && (
+                  <div className={`relevance-analysis relevance-${relevance.color}`}>
+                    <h4>Specialty Relevance Analysis</h4>
+                    <div className="relevance-badge">
+                      <span className={`badge-${relevance.color}`}>{relevance.relevant}</span>
+                    </div>
+                    <p>{relevance.reason}</p>
+                    <p className="diagnosis-count">Made {relevance.count} diagnosis/diagnoses in this document</p>
+                  </div>
+                )}
+
+                {npi && npi.found && (
+                  <div className="npi-results">
+                    <h4>✓ NPI Registry Data</h4>
+                    <div className="npi-grid">
+                      <div className="npi-item">
+                        <span className="npi-label">NPI Number:</span>
+                        <span className="npi-value">{npi.npi}</span>
+                      </div>
+                      <div className="npi-item">
+                        <span className="npi-label">Full Name:</span>
+                        <span className="npi-value">{npi.name} {npi.credential}</span>
+                      </div>
+                      <div className="npi-item">
+                        <span className="npi-label">Gender:</span>
+                        <span className="npi-value">{npi.gender}</span>
+                      </div>
+                      {npi.taxonomies && npi.taxonomies.length > 0 && (
+                        <div className="npi-item full-width">
+                          <span className="npi-label">Specialties:</span>
+                          <div className="taxonomy-list">
+                            {npi.taxonomies.map((tax, i) => (
+                              <span key={i} className="taxonomy-badge">
+                                {tax.desc} {tax.primary && '(Primary)'}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {npi.addresses && npi.addresses.length > 0 && (
+                        <div className="npi-item full-width">
+                          <span className="npi-label">Practice Address:</span>
+                          <span className="npi-value">
+                            {npi.addresses[0].address_1}, {npi.addresses[0].city}, {npi.addresses[0].state} {npi.addresses[0].postal_code}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {npi && !npi.found && (
+                  <div className="npi-not-found">
+                    <p>⚠️ {npi.message}</p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
