@@ -610,6 +610,7 @@ function DiagnosesPage() {
   const [imageUrls, setImageUrls] = useState({});
   const [selectedImage, setSelectedImage] = useState(null);
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [selectedSpecialties, setSelectedSpecialties] = useState([]);
 
   useEffect(() => {
     fetchDiagnoses();
@@ -743,6 +744,35 @@ function DiagnosesPage() {
   };
 
   const groupedDiagnoses = groupBySpecialty(filteredDiagnoses);
+  
+  // Get all available specialties for the filter dropdown
+  const allSpecialties = Object.keys(groupedDiagnoses);
+  
+  // Filter grouped diagnoses based on selected specialties
+  const displayedDiagnoses = selectedSpecialties.length === 0 
+    ? groupedDiagnoses 
+    : Object.keys(groupedDiagnoses)
+        .filter(specialty => selectedSpecialties.includes(specialty))
+        .reduce((acc, specialty) => {
+          acc[specialty] = groupedDiagnoses[specialty];
+          return acc;
+        }, {});
+
+  const toggleSpecialty = (specialty) => {
+    setSelectedSpecialties(prev => 
+      prev.includes(specialty)
+        ? prev.filter(s => s !== specialty)
+        : [...prev, specialty]
+    );
+  };
+
+  const clearAllFilters = () => {
+    setSelectedSpecialties([]);
+  };
+
+  const selectAllSpecialties = () => {
+    setSelectedSpecialties(allSpecialties);
+  };
 
   if (loading) return <div className="loading">Loading diagnoses...</div>;
 
@@ -752,23 +782,66 @@ function DiagnosesPage() {
       
       <div className="page-header">
         <h2>🩺 Diagnoses by Medical Specialty</h2>
-        <p className="subtitle">{diagnoses.length} diagnosis/diagnoses found across {Object.keys(groupedDiagnoses).length} specialties</p>
+        <p className="subtitle">
+          {diagnoses.length} diagnosis/diagnoses found across {Object.keys(groupedDiagnoses).length} specialties
+          {selectedSpecialties.length > 0 && ` (showing ${selectedSpecialties.length} selected)`}
+        </p>
       </div>
 
-      <div className="search-bar">
-        <input
-          type="text"
-          placeholder="Search diagnoses..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+      <div className="filter-section">
+        <div className="search-bar">
+          <input
+            type="text"
+            placeholder="Search diagnoses..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+
+        <div className="specialty-filter">
+          <label className="filter-label">
+            <span>🏥 Filter by Specialty:</span>
+            <div className="filter-actions">
+              <button 
+                onClick={selectAllSpecialties} 
+                className="filter-action-btn"
+                disabled={selectedSpecialties.length === allSpecialties.length}
+              >
+                Select All
+              </button>
+              <button 
+                onClick={clearAllFilters} 
+                className="filter-action-btn"
+                disabled={selectedSpecialties.length === 0}
+              >
+                Clear All
+              </button>
+            </div>
+          </label>
+          <div className="specialty-checkboxes">
+            {allSpecialties.map(specialty => (
+              <label key={specialty} className="specialty-checkbox">
+                <input
+                  type="checkbox"
+                  checked={selectedSpecialties.includes(specialty)}
+                  onChange={() => toggleSpecialty(specialty)}
+                />
+                <span className="checkbox-label-text">
+                  {specialty} ({groupedDiagnoses[specialty].length})
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
       </div>
 
       {filteredDiagnoses.length === 0 ? (
         <div className="info-message">No diagnoses found</div>
+      ) : Object.keys(displayedDiagnoses).length === 0 ? (
+        <div className="info-message">No specialties selected. Please select one or more specialties above.</div>
       ) : (
         <div className="diagnoses-by-specialty">
-          {Object.entries(groupedDiagnoses).map(([specialty, diagList]) => (
+          {Object.entries(displayedDiagnoses).map(([specialty, diagList]) => (
             <div key={specialty} className="specialty-section">
               <div className="specialty-header">
                 <h3>{specialty}</h3>
