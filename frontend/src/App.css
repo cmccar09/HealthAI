@@ -290,6 +290,64 @@ body {
   font-weight: 500;
 }
 
+/* Healthcare Providers */
+.providers-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.provider-card {
+  background: var(--bg-gray);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+  transition: all 0.2s;
+}
+
+.provider-card:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.provider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.provider-header strong {
+  color: var(--text-primary);
+  font-size: 1.05rem;
+}
+
+.provider-specialty {
+  background: var(--primary-color);
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.provider-role,
+.provider-facility,
+.provider-contact {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin: 0.25rem 0;
+}
+
+.provider-facility,
+.provider-contact {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 /* Info Message */
 .info-message {
   background: var(--bg-white);

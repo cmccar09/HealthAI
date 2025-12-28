@@ -232,6 +232,7 @@ function DocumentDashboard() {
 function PatientSummary() {
   const { documentId } = useParams();
   const [patients, setPatients] = useState([]);
+  const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -240,17 +241,40 @@ function PatientSummary() {
 
   const fetchPatients = async () => {
     try {
-      const command = new ScanCommand({
-        TableName: 'HealthAI-Patients',
-        FilterExpression: 'document_id = :docId',
-        ExpressionAttributeValues: { ':docId': documentId }
-      });
-      const response = await docClient.send(command);
-      setPatients(response.Items || []);
+      const [patientsRes, providersRes] = await Promise.all([
+        docClient.send(new ScanCommand({
+          TableName: 'HealthAI-Patients',
+          FilterExpression: 'document_id = :docId',
+          ExpressionAttributeValues: { ':docId': documentId }
+        })),
+        docClient.send(new ScanCommand({
+          TableName: 'HealthAI-Providers',
+          FilterExpression: 'document_id = :docId',
+          ExpressionAttributeValues: { ':docId': documentId }
+        }))
+      ]);
+      setPatients(patientsRes.Items || []);
+      setProviders(providersRes.Items || []);
     } catch (error) {
       console.error('Error fetching patients:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const calculateAge = (dob) => {
+    if (!dob) return null;
+    try {
+      const birthDate = new Date(dob);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      return age;
+    } catch {
+      return null;
     }
   };
 
@@ -270,34 +294,58 @@ function PatientSummary() {
           <p className="subtitle">Patient information is typically found on cover pages or demographic sheets.</p>
         </div>
       ) : (
-        patients.map(patient => (
+        patients.map(patient => {
+          const age = calculateAge(patient.patient_dob);
+          
+          return (
           <div key={patient.patient_id} className="patient-summary">
             <section className="info-section">
               <h3>General Information</h3>
               <div className="info-grid">
                 <div className="info-item">
-                  <span className="label">First Name:</span>
-                  <span className="value">{patient.patient_first_name || 'N/A'}</span>
-                </div>
-                <div className="info-item">
-                  <span className="label">Last Name:</span>
-                  <span className="value">{patient.patient_last_name || 'N/A'}</span>
+                  <span className="label">Full Name:</span>
+                  <span className="value">
+                    {patient.patient_first_name || patient.patient_last_name 
+                      ? `${patient.patient_first_name || ''} ${patient.patient_last_name || ''}`.trim()
+                      : 'N/A'}
+                  </span>
                 </div>
                 <div className="info-item">
                   <span className="label">Date of Birth:</span>
-                  <span className="value">{patient.patient_dob || 'N/A'}</span>
+                  <span className="value">
+                    {patient.patient_dob || 'N/A'}
+                    {age && ` (${age} years old)`}
+                  </span>
                 </div>
                 <div className="info-item">
                   <span className="label">Gender:</span>
                   <span className="value">{patient.gender || 'N/A'}</span>
                 </div>
                 <div className="info-item">
+                  <span className="label">Blood Type:</span>
+                  <span className="value">{patient.blood_type || 'N/A'}</span>
+                </div>
+                <div className="info-item">
                   <span className="label">MRN:</span>
                   <span className="value">{patient.patient_mrn || 'N/A'}</span>
                 </div>
                 <div className="info-item">
-                  <span className="label">Blood Type:</span>
-                  <span className="value">{patient.blood_type || 'N/A'}</span>
+                  <span className="label">SSN:</span>
+                  <span className="value">{patient.patient_ssn ? `***-**-${patient.patient_ssn.slice(-4)}` : 'N/A'}</span>
+                </div>
+              </div>
+            </section>
+
+            <section className="info-section">
+              <h3>Medical Facility</h3>
+              <div className="info-grid">
+                <div className="info-item full-width">
+                  <span className="label">Facility Name:</span>
+                  <span className="value">{patient.medical_facility || 'N/A'}</span>
+                </div>
+                <div className="info-item">
+                  <span className="label">Document Date:</span>
+                  <span className="value">{patient.document_date || 'N/A'}</span>
                 </div>
               </div>
             </section>
@@ -316,14 +364,19 @@ function PatientSummary() {
                 <div className="info-item full-width">
                   <span className="label">Address:</span>
                   <span className="value">
-                    {[patient.address_line1, patient.address_line2, patient.city, patient.state, patient.postal_code]
-                      .filter(Boolean).join(', ') || 'N/A'}
+                    {[
+                      patient.address_line1,
+                      patient.city,
+                      patient.state,
+                      patient.postal_code,
+                      patient.country
+                    ].filter(Boolean).join(', ') || 'N/A'}
                   </span>
                 </div>
               </div>
             </section>
 
-            {patient.allergies && patient.allergies !== 'Unknown' && (
+            {patient.allergies && patient.allergies !== 'Unknown' && patient.allergies !== 'None' && (
               <section className="info-section alert-section">
                 <h3>⚠️ Allergies</h3>
                 <p className="alert-text">{patient.allergies}</p>
@@ -345,8 +398,37 @@ function PatientSummary() {
                 </div>
               </section>
             )}
+
+            {providers.length > 0 && (
+              <section className="info-section">
+                <h3>Healthcare Providers</h3>
+                <div className="providers-list">
+                  {providers.map((provider, idx) => (
+                    <div key={idx} className="provider-card">
+                      <div className="provider-header">
+                        <strong>
+                          Dr. {provider.doctor_first_name} {provider.doctor_last_name}
+                        </strong>
+                        {provider.specialty && (
+                          <span className="provider-specialty">{provider.specialty}</span>
+                        )}
+                      </div>
+                      {provider.role_in_care && (
+                        <p className="provider-role">Role: {provider.role_in_care}</p>
+                      )}
+                      {provider.facility && (
+                        <p className="provider-facility">📍 {provider.facility}</p>
+                      )}
+                      {provider.contact_info && (
+                        <p className="provider-contact">📞 {provider.contact_info}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
-        ))
+        )})
       )}
     </div>
   );
