@@ -732,15 +732,73 @@ body {
 
 .zoom-info {
   background: rgba(0, 0, 0, 0.8);
-  padding: 1rem;
+  padding: 1.5rem;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   color: white;
-  text-align: center;
+  text-align: left;
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .zoom-info h3 {
   margin-bottom: 0.5rem;
   color: white;
+  text-align: center;
+}
+
+.zoom-info .extracted-info {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.zoom-info .extracted-info h4 {
+  color: var(--primary-color);
+  margin-bottom: 0.75rem;
+  font-size: 1.125rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.zoom-info .info-highlight {
+  background: rgba(255, 215, 0, 0.15);
+  border: 2px solid rgba(255, 215, 0, 0.4);
+  border-radius: 6px;
+  padding: 1rem;
+  margin: 0.75rem 0;
+}
+
+.zoom-info .info-highlight p {
+  margin: 0.5rem 0;
+  color: white;
+  font-size: 0.95rem;
+}
+
+.zoom-info .info-highlight p:first-child {
+  font-size: 1.1rem;
+  color: #ffd700;
+  font-weight: 600;
+}
+
+.zoom-info .help-text {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+  margin-top: 0.75rem;
+  text-align: center;
+  font-style: italic;
+}
+
+.zoom-info .abnormal-flag {
+  color: #ff6b6b;
+  font-weight: 600;
+  background: rgba(255, 107, 107, 0.2);
+  padding: 0.5rem;
+  border-radius: 4px;
+  margin-top: 0.5rem;
 }
 
 .zoom-info .category-tags {

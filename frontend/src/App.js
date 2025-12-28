@@ -423,9 +423,13 @@ function MedicationsPage() {
     }
   };
 
-  const openImageModal = (pageNumber) => {
+  const openImageModal = (pageNumber, medDetails = null) => {
     if (imageUrls[pageNumber]) {
-      setSelectedImage({ pageNumber, url: imageUrls[pageNumber] });
+      setSelectedImage({ 
+        pageNumber, 
+        url: imageUrls[pageNumber],
+        details: medDetails
+      });
       setZoomLevel(1);
     }
   };
@@ -521,7 +525,14 @@ function MedicationsPage() {
                       {pageNumber && imageUrls[pageNumber] ? (
                         <button 
                           className="view-image-btn"
-                          onClick={() => openImageModal(pageNumber)}
+                          onClick={() => openImageModal(pageNumber, {
+                            type: 'medication',
+                            name: med.medication_name,
+                            dosage: med.dosage,
+                            frequency: med.frequency,
+                            route: med.route,
+                            notes: med.notes
+                          })}
                           title="View source page"
                         >
                           🖼️ View
@@ -562,8 +573,25 @@ function MedicationsPage() {
               />
             </div>
             <div className="zoom-info">
-              <h3>Page {selectedImage.pageNumber}</h3>
-              <p>Source page containing medication</p>
+              <h3>📄 Page {selectedImage.pageNumber}</h3>
+              {selectedImage.details && selectedImage.details.type === 'medication' && (
+                <div className="extracted-info">
+                  <h4>💊 Extracted Medication Information:</h4>
+                  <div className="info-highlight">
+                    <p><strong>Look for:</strong> "{selectedImage.details.name}"</p>
+                    {selectedImage.details.dosage && (
+                      <p><strong>Dosage:</strong> {selectedImage.details.dosage}</p>
+                    )}
+                    {selectedImage.details.frequency && (
+                      <p><strong>Frequency:</strong> {selectedImage.details.frequency}</p>
+                    )}
+                    {selectedImage.details.route && (
+                      <p><strong>Route:</strong> {selectedImage.details.route}</p>
+                    )}
+                  </div>
+                  <p className="help-text">👆 Find this text on the page image above</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -643,9 +671,13 @@ function DiagnosesPage() {
     }
   };
 
-  const openImageModal = (pageNumber) => {
+  const openImageModal = (pageNumber, diagDetails = null) => {
     if (imageUrls[pageNumber]) {
-      setSelectedImage({ pageNumber, url: imageUrls[pageNumber] });
+      setSelectedImage({ 
+        pageNumber, 
+        url: imageUrls[pageNumber],
+        details: diagDetails
+      });
       setZoomLevel(1);
     }
   };
@@ -776,7 +808,13 @@ function DiagnosesPage() {
                       {pageNumber && imageUrls[pageNumber] && (
                         <button 
                           className="view-image-btn diagnosis-view-btn"
-                          onClick={() => openImageModal(pageNumber)}
+                          onClick={() => openImageModal(pageNumber, {
+                            type: 'diagnosis',
+                            description: diag.diagnosis_description,
+                            code: diag.diagnosis_code,
+                            doctor: `${diag.diagnosing_doctor_first_name || ''} ${diag.diagnosing_doctor_last_name || ''}`.trim(),
+                            notes: diag.notes
+                          })}
                           title="View source page"
                         >
                           🖼️ View Source Page
@@ -815,8 +853,22 @@ function DiagnosesPage() {
               />
             </div>
             <div className="zoom-info">
-              <h3>Page {selectedImage.pageNumber}</h3>
-              <p>Source page containing diagnosis</p>
+              <h3>📄 Page {selectedImage.pageNumber}</h3>
+              {selectedImage.details && selectedImage.details.type === 'diagnosis' && (
+                <div className="extracted-info">
+                  <h4>🩺 Extracted Diagnosis Information:</h4>
+                  <div className="info-highlight">
+                    <p><strong>Look for:</strong> "{selectedImage.details.description}"</p>
+                    {selectedImage.details.code && (
+                      <p><strong>Code:</strong> {selectedImage.details.code}</p>
+                    )}
+                    {selectedImage.details.doctor && (
+                      <p><strong>Doctor:</strong> Dr. {selectedImage.details.doctor}</p>
+                    )}
+                  </div>
+                  <p className="help-text">👆 Find this text on the page image above</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -908,9 +960,13 @@ function TestResultsPage() {
     }
   };
 
-  const openImageModal = (pageNumber) => {
+  const openImageModal = (pageNumber, testDetails = null) => {
     if (imageUrls[pageNumber]) {
-      setSelectedImage({ pageNumber, url: imageUrls[pageNumber] });
+      setSelectedImage({ 
+        pageNumber, 
+        url: imageUrls[pageNumber],
+        details: testDetails
+      });
       setZoomLevel(1);
     }
   };
@@ -1018,7 +1074,17 @@ function TestResultsPage() {
                       {pageNumber && imageUrls[pageNumber] ? (
                         <button 
                           className="view-image-btn"
-                          onClick={() => openImageModal(pageNumber)}
+                          onClick={() => openImageModal(pageNumber, {
+                            type: 'test',
+                            name: test.test_name,
+                            value: test.result_value,
+                            unit: test.result_unit,
+                            date: test.test_date,
+                            abnormal: test.is_abnormal,
+                            normalRange: test.normal_range_low && test.normal_range_high 
+                              ? `${test.normal_range_low} - ${test.normal_range_high}` 
+                              : null
+                          })}
                           title="View source page"
                         >
                           🖼️ View
@@ -1059,8 +1125,26 @@ function TestResultsPage() {
               />
             </div>
             <div className="zoom-info">
-              <h3>Page {selectedImage.pageNumber}</h3>
-              <p>Source page containing test result</p>
+              <h3>📄 Page {selectedImage.pageNumber}</h3>
+              {selectedImage.details && selectedImage.details.type === 'test' && (
+                <div className="extracted-info">
+                  <h4>🔬 Extracted Test Result Information:</h4>
+                  <div className="info-highlight">
+                    <p><strong>Look for:</strong> "{selectedImage.details.name}"</p>
+                    <p><strong>Result:</strong> {selectedImage.details.value} {selectedImage.details.unit || ''}</p>
+                    {selectedImage.details.date && (
+                      <p><strong>Date:</strong> {selectedImage.details.date}</p>
+                    )}
+                    {selectedImage.details.normalRange && (
+                      <p><strong>Normal Range:</strong> {selectedImage.details.normalRange}</p>
+                    )}
+                    {selectedImage.details.abnormal === 'Yes' && (
+                      <p className="abnormal-flag">⚠️ This result is abnormal</p>
+                    )}
+                  </div>
+                  <p className="help-text">👆 Find this text on the page image above</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
