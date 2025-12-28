@@ -429,6 +429,45 @@ body {
   color: #991b1b;
 }
 
+/* Diagnoses by Specialty */
+.diagnoses-by-specialty {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.specialty-section {
+  background: var(--bg-gray);
+  border-radius: 12px;
+  padding: 1.5rem;
+  border: 1px solid var(--border-color);
+}
+
+.specialty-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid var(--primary-color);
+}
+
+.specialty-header h3 {
+  font-size: 1.375rem;
+  color: var(--primary-color);
+  margin: 0;
+  font-weight: 600;
+}
+
+.specialty-count {
+  background: var(--primary-color);
+  color: white;
+  padding: 0.375rem 0.875rem;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
 /* Diagnosis Grid */
 .diagnosis-grid {
   display: grid;

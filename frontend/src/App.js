@@ -679,6 +679,39 @@ function DiagnosesPage() {
     diag.diagnosis_code?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Group diagnoses by specialty
+  const groupBySpecialty = (diagList) => {
+    const grouped = {};
+    const uncategorized = [];
+    
+    diagList.forEach(diag => {
+      const specialty = diag.diagnosing_doctor_specialty;
+      if (specialty && specialty !== '' && specialty !== 'N/A' && specialty !== 'Unknown') {
+        if (!grouped[specialty]) {
+          grouped[specialty] = [];
+        }
+        grouped[specialty].push(diag);
+      } else {
+        uncategorized.push(diag);
+      }
+    });
+    
+    // Sort specialties alphabetically
+    const sortedGroups = Object.keys(grouped).sort().reduce((acc, key) => {
+      acc[key] = grouped[key];
+      return acc;
+    }, {});
+    
+    // Add uncategorized at the end if any exist
+    if (uncategorized.length > 0) {
+      sortedGroups['Other / Unspecified'] = uncategorized;
+    }
+    
+    return sortedGroups;
+  };
+
+  const groupedDiagnoses = groupBySpecialty(filteredDiagnoses);
+
   if (loading) return <div className="loading">Loading diagnoses...</div>;
 
   return (
@@ -686,8 +719,8 @@ function DiagnosesPage() {
       <Link to={`/document/${documentId}`} className="back-link">← Back to Dashboard</Link>
       
       <div className="page-header">
-        <h2>🩺 Diagnoses</h2>
-        <p className="subtitle">{diagnoses.length} diagnosis/diagnoses found</p>
+        <h2>🩺 Diagnoses by Medical Specialty</h2>
+        <p className="subtitle">{diagnoses.length} diagnosis/diagnoses found across {Object.keys(groupedDiagnoses).length} specialties</p>
       </div>
 
       <div className="search-bar">
@@ -702,49 +735,59 @@ function DiagnosesPage() {
       {filteredDiagnoses.length === 0 ? (
         <div className="info-message">No diagnoses found</div>
       ) : (
-        <div className="diagnosis-grid">
-          {filteredDiagnoses.map((diag, idx) => {
-            // Get page data from page_id
-            const diagPage = Object.values(pages).find(p => p.page_id === diag.page_id);
-            const pageNumber = diagPage?.page_number;
-            
-            return (
-              <div key={idx} className="diagnosis-card">
-                <h4>{diag.diagnosis_description || 'N/A'}</h4>
-                {diag.diagnosis_code && (
-                  <p className="code">Code: {diag.diagnosis_code}</p>
-                )}
-                <div className="diagnosis-meta">
-                  {diag.diagnosed_date && (
-                    <p><strong>Date:</strong> {diag.diagnosed_date}</p>
-                  )}
-                  {diag.diagnosing_doctor_first_name && (
-                    <p><strong>Doctor:</strong> Dr. {diag.diagnosing_doctor_first_name} {diag.diagnosing_doctor_last_name}</p>
-                  )}
-                  {diag.diagnosing_facility_name && (
-                    <p><strong>Facility:</strong> {diag.diagnosing_facility_name}</p>
-                  )}
-                  {pageNumber && (
-                    <p><strong>Page:</strong> {pageNumber}</p>
-                  )}
-                </div>
-                {diag.notes && diag.notes !== 'None' && (
-                  <div className="notes">
-                    <strong>Notes:</strong> {diag.notes}
-                  </div>
-                )}
-                {pageNumber && imageUrls[pageNumber] && (
-                  <button 
-                    className="view-image-btn diagnosis-view-btn"
-                    onClick={() => openImageModal(pageNumber)}
-                    title="View source page"
-                  >
-                    🖼️ View Source Page
-                  </button>
-                )}
+        <div className="diagnoses-by-specialty">
+          {Object.entries(groupedDiagnoses).map(([specialty, diagList]) => (
+            <div key={specialty} className="specialty-section">
+              <div className="specialty-header">
+                <h3>{specialty}</h3>
+                <span className="specialty-count">{diagList.length} diagnosis{diagList.length !== 1 ? 'es' : ''}</span>
               </div>
-            );
-          })}
+              <div className="diagnosis-grid">
+                {diagList.map((diag, idx) => {
+                  // Get page data from page_id
+                  const diagPage = Object.values(pages).find(p => p.page_id === diag.page_id);
+                  const pageNumber = diagPage?.page_number;
+                  
+                  return (
+                    <div key={idx} className="diagnosis-card">
+                      <h4>{diag.diagnosis_description || 'N/A'}</h4>
+                      {diag.diagnosis_code && (
+                        <p className="code">Code: {diag.diagnosis_code}</p>
+                      )}
+                      <div className="diagnosis-meta">
+                        {diag.diagnosed_date && (
+                          <p><strong>Date:</strong> {diag.diagnosed_date}</p>
+                        )}
+                        {diag.diagnosing_doctor_first_name && (
+                          <p><strong>Doctor:</strong> Dr. {diag.diagnosing_doctor_first_name} {diag.diagnosing_doctor_last_name}</p>
+                        )}
+                        {diag.diagnosing_facility_name && (
+                          <p><strong>Facility:</strong> {diag.diagnosing_facility_name}</p>
+                        )}
+                        {pageNumber && (
+                          <p><strong>Page:</strong> {pageNumber}</p>
+                        )}
+                      </div>
+                      {diag.notes && diag.notes !== 'None' && (
+                        <div className="notes">
+                          <strong>Notes:</strong> {diag.notes}
+                        </div>
+                      )}
+                      {pageNumber && imageUrls[pageNumber] && (
+                        <button 
+                          className="view-image-btn diagnosis-view-btn"
+                          onClick={() => openImageModal(pageNumber)}
+                          title="View source page"
+                        >
+                          🖼️ View Source Page
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
