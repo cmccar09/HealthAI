@@ -58,6 +58,7 @@ function App() {
 
 // Patient Search Component (Home Page)
 function PatientSearch() {
+  const [activeHomeTab, setActiveHomeTab] = useState('search');
   const [searchParams, setSearchParams] = useState({
     firstName: '',
     lastName: '',
@@ -126,13 +127,26 @@ function PatientSearch() {
   return (
     <div className="patient-search-container">
       <div className="search-tabs">
-        <div className="tab active">Patient Search</div>
-        <div className="tab">Client Confirmation</div>
+        <div 
+          className={activeHomeTab === 'search' ? 'tab active' : 'tab'}
+          onClick={() => setActiveHomeTab('search')}
+        >
+          Patient Search
+        </div>
+        <div 
+          className={activeHomeTab === 'confirmation' ? 'tab active' : 'tab'}
+          onClick={() => setActiveHomeTab('confirmation')}
+        >
+          Client Confirmation
+        </div>
       </div>
       
       <div className="search-content">
         <h2 className="system-title">iMed2 Medical Records System</h2>
         
+        {activeHomeTab === 'confirmation' ? (
+          <ProcessingStatusHome />
+        ) : (
         <div className="search-section">
           <h3>Patient Search</h3>
           
@@ -271,7 +285,261 @@ function PatientSearch() {
             </div>
           )}
         </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+// Processing Status Home Component - System-wide document processing status
+function ProcessingStatusHome() {
+  const [allDocuments, setAllDocuments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchAllDocuments();
+    
+    const interval = setInterval(() => {
+      if (autoRefresh) {
+        fetchAllDocuments();
+      }
+    }, 10000);
+    
+    return () => clearInterval(interval);
+  }, [autoRefresh]);
+
+  const fetchAllDocuments = async () => {
+    try {
+      const documentsRes = await docClient.send(new ScanCommand({
+        TableName: 'HealthAI-Documents'
+      }));
+
+      const documents = documentsRes.Items || [];
+      
+      const statusPromises = documents.map(async (doc) => {
+        try {
+          const pagesRes = await docClient.send(new ScanCommand({
+            TableName: 'HealthAI-Pages',
+            FilterExpression: 'document_id = :did',
+            ExpressionAttributeValues: {
+              ':did': doc.document_id
+            },
+            Select: 'COUNT'
+          }));
+          
+          const processedPages = pagesRes.Count || 0;
+          
+          return {
+            document_id: doc.document_id,
+            patient_id: doc.patient_id || 'Unknown',
+            patient_name: doc.patient_name || 'Unknown',
+            filename: doc.original_filename || 'Unknown',
+            upload_date: doc.upload_timestamp || doc.created_at || 'Unknown',
+            total_pages: doc.total_pages || 0,
+            processed_pages: processedPages,
+            status: processedPages >= (doc.total_pages || 0) ? 'Complete' : 'Processing',
+            progress: doc.total_pages ? Math.round((processedPages / doc.total_pages) * 100) : 0,
+            file_size: doc.file_size || 0
+          };
+        } catch (err) {
+          console.error('Error fetching status:', err);
+          return {
+            document_id: doc.document_id,
+            patient_id: doc.patient_id || 'Unknown',
+            patient_name: doc.patient_name || 'Unknown',
+            filename: doc.original_filename || 'Unknown',
+            upload_date: doc.upload_timestamp || 'Unknown',
+            total_pages: doc.total_pages || 0,
+            processed_pages: 0,
+            status: 'Error',
+            progress: 0,
+            file_size: doc.file_size || 0
+          };
+        }
+      });
+
+      const statuses = await Promise.all(statusPromises);
+      statuses.sort((a, b) => new Date(b.upload_date) - new Date(a.upload_date));
+      
+      setAllDocuments(statuses);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching documents:', error);
+      setLoading(false);
+    }
+  };
+
+  const formatFileSize = (bytes) => {
+    if (!bytes) return 'N/A';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr || dateStr === 'Unknown') return 'Unknown';
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (err) {
+      return dateStr;
+    }
+  };
+
+  const getStatusBadge = (status, progress) => {
+    if (status === 'Complete') {
+      return <span className="status-badge status-complete">✓ Complete</span>;
+    } else if (status === 'Processing') {
+      return <span className="status-badge status-processing">⟳ Processing ({progress}%)</span>;
+    } else {
+      return <span className="status-badge status-error">⚠ Error</span>;
+    }
+  };
+
+  const hasInFlightDocs = allDocuments.some(doc => doc.status === 'Processing');
+  const totalDocs = allDocuments.length;
+  const completedDocs = allDocuments.filter(d => d.status === 'Complete').length;
+  const processingDocs = allDocuments.filter(d => d.status === 'Processing').length;
+  const errorDocs = allDocuments.filter(d => d.status === 'Error').length;
+  const totalPagesProcessed = allDocuments.reduce((sum, d) => sum + d.processed_pages, 0);
+  const totalPages = allDocuments.reduce((sum, d) => sum + d.total_pages, 0);
+
+  return (
+    <div className="processing-status-home">
+      <div className="status-header">
+        <div>
+          <h3>📊 System-Wide Processing Status</h3>
+          <p>Real-time monitoring of all document uploads and processing across all patients</p>
+        </div>
+        <div className="status-controls">
+          <label className="auto-refresh-toggle">
+            <input 
+              type="checkbox" 
+              checked={autoRefresh} 
+              onChange={(e) => setAutoRefresh(e.target.checked)}
+            />
+            Auto-refresh every 10s
+          </label>
+          <button onClick={fetchAllDocuments} className="refresh-button">
+            🔄 Refresh Now
+          </button>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="summary-cards">
+        <div className="summary-card">
+          <div className="card-icon">📄</div>
+          <div className="card-content">
+            <div className="card-label">Total Documents</div>
+            <div className="card-value">{totalDocs}</div>
+          </div>
+        </div>
+        <div className="summary-card">
+          <div className="card-icon">✅</div>
+          <div className="card-content">
+            <div className="card-label">Completed</div>
+            <div className="card-value">{completedDocs}</div>
+          </div>
+        </div>
+        <div className="summary-card processing">
+          <div className="card-icon">⟳</div>
+          <div className="card-content">
+            <div className="card-label">Processing</div>
+            <div className="card-value">{processingDocs}</div>
+          </div>
+        </div>
+        <div className="summary-card error">
+          <div className="card-icon">⚠️</div>
+          <div className="card-content">
+            <div className="card-label">Errors</div>
+            <div className="card-value">{errorDocs}</div>
+          </div>
+        </div>
+        <div className="summary-card">
+          <div className="card-icon">📊</div>
+          <div className="card-content">
+            <div className="card-label">Pages Processed</div>
+            <div className="card-value">{totalPagesProcessed.toLocaleString()} / {totalPages.toLocaleString()}</div>
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="loading">Loading processing status...</div>
+      ) : allDocuments.length === 0 ? (
+        <div className="no-data">
+          <p>No documents found in the system.</p>
+        </div>
+      ) : (
+        <>
+          {hasInFlightDocs && (
+            <div className="in-flight-alert">
+              <strong>⚡ Active Processing:</strong> {processingDocs} document(s) currently being processed
+            </div>
+          )}
+          
+          <div className="status-table-container">
+            <table className="status-table">
+              <thead>
+                <tr>
+                  <th>Patient</th>
+                  <th>Document ID</th>
+                  <th>Filename</th>
+                  <th>Upload Date/Time</th>
+                  <th>File Size</th>
+                  <th>Total Pages</th>
+                  <th>Processed</th>
+                  <th>Progress</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allDocuments.map((doc, idx) => (
+                  <tr key={idx} className={doc.status === 'Processing' ? 'processing-row' : ''}>
+                    <td className="patient-name">{doc.patient_name}</td>
+                    <td className="document-id">
+                      <code>{doc.document_id.substring(0, 8)}...</code>
+                    </td>
+                    <td className="filename">{doc.filename}</td>
+                    <td>{formatDate(doc.upload_date)}</td>
+                    <td>{formatFileSize(doc.file_size)}</td>
+                    <td className="text-center">{doc.total_pages}</td>
+                    <td className="text-center">{doc.processed_pages}</td>
+                    <td>
+                      <div className="progress-bar-container">
+                        <div 
+                          className="progress-bar-fill" 
+                          style={{ width: `${doc.progress}%` }}
+                        ></div>
+                        <span className="progress-text">{doc.progress}%</span>
+                      </div>
+                    </td>
+                    <td>{getStatusBadge(doc.status, doc.progress)}</td>
+                    <td>
+                      <button 
+                        className="view-button"
+                        onClick={() => navigate(`/patient/${doc.patient_id}`)}
+                      >
+                        View Patient
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -414,6 +682,7 @@ function PatientDashboard() {
         <button className={activeTab === 'radiology' ? 'tab-button active' : 'tab-button'} onClick={() => setActiveTab('radiology')}>Radiology</button>
         <button className={activeTab === 'family' ? 'tab-button active' : 'tab-button'} onClick={() => setActiveTab('family')}>Social/Family History</button>
         <button className={activeTab === 'summary' ? 'tab-button active' : 'tab-button'} onClick={() => setActiveTab('summary')}>Medical Summary</button>
+        <button className={activeTab === 'status' ? 'tab-button active' : 'tab-button'} onClick={() => setActiveTab('status')}>Processing Status</button>
       </div>
       
       <div className="tab-content">
@@ -425,6 +694,7 @@ function PatientDashboard() {
         {activeTab === 'radiology' && <RadiologyTab radiology={radiology} />}
         {activeTab === 'family' && <FamilyHistoryTab familyHistory={familyHistory} socialHistory={socialHistory} />}
         {activeTab === 'summary' && <MedicalSummaryTab medications={medications} diagnoses={diagnoses} testResults={testResults} patientId={patientId} />}
+        {activeTab === 'status' && <StatusTab patientId={patientId} />}
       </div>
     </div>
   );
@@ -4231,6 +4501,232 @@ function NextStepsPage() {
           and current clinical guidelines.
         </p>
       </div>
+    </div>
+  );
+}
+
+// Status Tab Component - Document Processing History and Status
+function StatusTab({ patientId }) {
+  const [documentStatus, setDocumentStatus] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+
+  useEffect(() => {
+    fetchDocumentStatus();
+    
+    // Auto-refresh every 10 seconds if enabled and there are in-flight documents
+    const interval = setInterval(() => {
+      if (autoRefresh) {
+        fetchDocumentStatus();
+      }
+    }, 10000);
+    
+    return () => clearInterval(interval);
+  }, [patientId, autoRefresh]);
+
+  const fetchDocumentStatus = async () => {
+    try {
+      // Fetch all documents for this patient
+      const documentsRes = await docClient.send(new ScanCommand({
+        TableName: 'HealthAI-Documents',
+        FilterExpression: 'patient_id = :pid OR contains(original_filename, :pid)',
+        ExpressionAttributeValues: {
+          ':pid': patientId
+        }
+      }));
+
+      const documents = documentsRes.Items || [];
+      
+      // For each document, fetch page count and processing status
+      const statusPromises = documents.map(async (doc) => {
+        try {
+          // Count total pages for this document
+          const pagesRes = await docClient.send(new ScanCommand({
+            TableName: 'HealthAI-Pages',
+            FilterExpression: 'document_id = :did',
+            ExpressionAttributeValues: {
+              ':did': doc.document_id
+            },
+            Select: 'COUNT'
+          }));
+          
+          const processedPages = pagesRes.Count || 0;
+          
+          return {
+            document_id: doc.document_id,
+            filename: doc.original_filename || 'Unknown',
+            upload_date: doc.upload_timestamp || doc.created_at || 'Unknown',
+            total_pages: doc.total_pages || 0,
+            processed_pages: processedPages,
+            status: processedPages >= (doc.total_pages || 0) ? 'Complete' : 'Processing',
+            progress: doc.total_pages ? Math.round((processedPages / doc.total_pages) * 100) : 0,
+            file_size: doc.file_size || 0,
+            processing_time: doc.processing_time || 'N/A'
+          };
+        } catch (err) {
+          console.error('Error fetching status for document:', doc.document_id, err);
+          return {
+            document_id: doc.document_id,
+            filename: doc.original_filename || 'Unknown',
+            upload_date: doc.upload_timestamp || 'Unknown',
+            total_pages: doc.total_pages || 0,
+            processed_pages: 0,
+            status: 'Error',
+            progress: 0,
+            file_size: doc.file_size || 0,
+            processing_time: 'N/A'
+          };
+        }
+      });
+
+      const statuses = await Promise.all(statusPromises);
+      
+      // Sort by upload date (most recent first)
+      statuses.sort((a, b) => {
+        const dateA = new Date(a.upload_date);
+        const dateB = new Date(b.upload_date);
+        return dateB - dateA;
+      });
+      
+      setDocumentStatus(statuses);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching document status:', error);
+      setLoading(false);
+    }
+  };
+
+  const formatFileSize = (bytes) => {
+    if (!bytes) return 'N/A';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr || dateStr === 'Unknown') return 'Unknown';
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (err) {
+      return dateStr;
+    }
+  };
+
+  const getStatusBadge = (status, progress) => {
+    if (status === 'Complete') {
+      return <span className="status-badge status-complete">✓ Complete</span>;
+    } else if (status === 'Processing') {
+      return <span className="status-badge status-processing">⟳ Processing ({progress}%)</span>;
+    } else {
+      return <span className="status-badge status-error">⚠ Error</span>;
+    }
+  };
+
+  const hasInFlightDocs = documentStatus.some(doc => doc.status === 'Processing');
+
+  return (
+    <div className="status-tab">
+      <div className="status-header">
+        <div>
+          <h2>📋 Document Processing Status</h2>
+          <p>Upload history and real-time processing status for all documents</p>
+        </div>
+        <div className="status-controls">
+          <label className="auto-refresh-toggle">
+            <input 
+              type="checkbox" 
+              checked={autoRefresh} 
+              onChange={(e) => setAutoRefresh(e.target.checked)}
+            />
+            Auto-refresh every 10s
+          </label>
+          <button onClick={fetchDocumentStatus} className="refresh-button">
+            🔄 Refresh Now
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="loading">Loading document status...</div>
+      ) : documentStatus.length === 0 ? (
+        <div className="no-data">
+          <p>No documents found for this patient.</p>
+        </div>
+      ) : (
+        <>
+          {hasInFlightDocs && (
+            <div className="in-flight-alert">
+              <strong>⚡ Active Processing:</strong> {documentStatus.filter(d => d.status === 'Processing').length} document(s) currently being processed
+            </div>
+          )}
+          
+          <div className="status-table-container">
+            <table className="status-table">
+              <thead>
+                <tr>
+                  <th>Document ID</th>
+                  <th>Filename</th>
+                  <th>Upload Date/Time</th>
+                  <th>File Size</th>
+                  <th>Total Pages</th>
+                  <th>Processed</th>
+                  <th>Progress</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {documentStatus.map((doc, idx) => (
+                  <tr key={idx} className={doc.status === 'Processing' ? 'processing-row' : ''}>
+                    <td className="document-id">
+                      <code>{doc.document_id.substring(0, 8)}...</code>
+                    </td>
+                    <td className="filename">{doc.filename}</td>
+                    <td>{formatDate(doc.upload_date)}</td>
+                    <td>{formatFileSize(doc.file_size)}</td>
+                    <td className="text-center">{doc.total_pages}</td>
+                    <td className="text-center">{doc.processed_pages}</td>
+                    <td>
+                      <div className="progress-bar-container">
+                        <div 
+                          className="progress-bar-fill" 
+                          style={{ width: `${doc.progress}%` }}
+                        ></div>
+                        <span className="progress-text">{doc.progress}%</span>
+                      </div>
+                    </td>
+                    <td>{getStatusBadge(doc.status, doc.progress)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="status-summary">
+            <div className="summary-stat">
+              <strong>Total Documents:</strong> {documentStatus.length}
+            </div>
+            <div className="summary-stat">
+              <strong>Completed:</strong> {documentStatus.filter(d => d.status === 'Complete').length}
+            </div>
+            <div className="summary-stat">
+              <strong>Processing:</strong> {documentStatus.filter(d => d.status === 'Processing').length}
+            </div>
+            <div className="summary-stat">
+              <strong>Errors:</strong> {documentStatus.filter(d => d.status === 'Error').length}
+            </div>
+            <div className="summary-stat">
+              <strong>Total Pages Processed:</strong> {documentStatus.reduce((sum, d) => sum + d.processed_pages, 0)}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
