@@ -701,11 +701,55 @@ Categories must use exact names from list above. Empty array [] if page has no m
     try:
         parsed = json.loads(result)
         return parsed
-    except Exception as e:
-        print(f"JSON parse error: {e}, returning empty data")
-        print(f"First 500 chars of response: {result[:500]}")
+    except json.JSONDecodeError as e:
+        print(f"JSON parse error: {e}, attempting to fix and retry")
+        print(f"Error at line {e.lineno} column {e.colno}: {e.msg}")
+        print(f"First 1000 chars of response: {result[:1000]}")
+        
+        # Attempt to fix common JSON issues
+        fixed_result = result
+        
+        # Try to extract JSON if wrapped in markdown code blocks
+        if '```json' in fixed_result:
+            start = fixed_result.find('```json') + 7
+            end = fixed_result.rfind('```')
+            if end > start:
+                fixed_result = fixed_result[start:end].strip()
+        
+        # Try to fix unterminated strings by finding the last valid closing brace
+        # and truncating there
+        try:
+            # Find last complete JSON object
+            depth = 0
+            last_valid = -1
+            for i, char in enumerate(fixed_result):
+                if char == '{':
+                    depth += 1
+                elif char == '}':
+                    depth -= 1
+                    if depth == 0:
+                        last_valid = i + 1
+            
+            if last_valid > 0:
+                fixed_result = fixed_result[:last_valid]
+                parsed = json.loads(fixed_result)
+                print(f"Successfully recovered JSON after truncation")
+                return parsed
+        except:
+            pass
+        
+        # If all recovery attempts fail, return minimal valid data
+        print(f"Unable to recover JSON, returning empty data")
         return {
-            'categories': [{'name': 'Other', 'reason': 'Parse error'}],
+            'categories': [{'name': 'administrative', 'reason': 'JSON parse error - unable to extract data'}],
+            'medications': [],
+            'diagnoses': [],
+            'test_results': []
+        }
+    except Exception as e:
+        print(f"Unexpected error parsing response: {e}")
+        return {
+            'categories': [{'name': 'administrative', 'reason': 'Unexpected parse error'}],
             'medications': [],
             'diagnoses': [],
             'test_results': []
