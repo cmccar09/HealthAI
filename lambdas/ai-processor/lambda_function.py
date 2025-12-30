@@ -121,7 +121,7 @@ def lambda_handler(event, context):
             # Store categories
             categories = extracted_data.get('categories', [])
             if categories:
-                store_categories(page_id, categories)
+                store_categories(page_id, document_id, categories)
             
             # Store medications
             medications = extracted_data.get('medications', [])
@@ -983,7 +983,7 @@ def store_patient_data(document_id, patient_data):
     print(f"Stored patient data: {patient_id}")
 
 
-def store_categories(page_id, categories):
+def store_categories(page_id, document_id, categories):
     """Store page categories in DynamoDB."""
     
     categories_table = dynamodb.Table(CATEGORIES_TABLE)
@@ -994,7 +994,8 @@ def store_categories(page_id, categories):
             Item={
                 'category_id': category_id,
                 'page_id': page_id,
-                'category_name': cat.get('name', 'Other'),
+                'document_id': document_id,
+                'category_name': cat.get('name', 'other').lower(),  # Normalize to lowercase
                 'reason': cat.get('reason', 'Unknown')
             }
         )
