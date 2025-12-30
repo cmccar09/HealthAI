@@ -19,6 +19,11 @@ def lambda_handler(event, context):
     """
     Triggered when a PDF is uploaded to health-ai-upload bucket.
     Creates document record and triggers parallel page processing.
+    
+    SUPPORTS CONCURRENT UPLOADS:
+    - Each PDF gets a unique document_id (UUID)
+    - Multiple patients (3-4+) can be uploaded simultaneously
+    - Each document processes independently - no data mixing
     """
     
     for record in event['Records']:
@@ -26,10 +31,10 @@ def lambda_handler(event, context):
         bucket = record['s3']['bucket']['name']
         key = unquote_plus(record['s3']['object']['key'])
         
-        print(f"Processing upload: {key}")
-        
         # Generate unique IDs
         document_id = str(uuid.uuid4())
+        
+        print(f"[DOC:{document_id}] New upload: {key}")
         
         # Extract patient info from filename (e.g., "AlexDoe_MedicalRecords.pdf")
         filename = key.split('/')[-1]
@@ -53,13 +58,13 @@ def lambda_handler(event, context):
             import io
             pdf_reader = PdfReader(io.BytesIO(pdf_content))
             total_pages = len(pdf_reader.pages)
-            print(f"PDF has {total_pages} pages")
+            print(f"[DOC:{document_id}] PDF has {total_pages} pages")
         except Exception as e:
-            print(f"Error counting pages with PyPDF2: {e}")
+            print(f"[DOC:{document_id}] Error counting pages with PyPDF2: {e}")
             # Fallback: estimate based on file size (rough estimate)
             file_size_mb = len(pdf_content) / (1024 * 1024)
             total_pages = max(1, int(file_size_mb * 10))  # Rough estimate: ~10 pages per MB
-            print(f"Estimated {total_pages} pages based on file size")
+            print(f"[DOC:{document_id}] Estimated {total_pages} pages based on file size")
         
         # Create document record in DynamoDB
         documents_table = dynamodb.Table(DOCUMENTS_TABLE)
@@ -82,7 +87,7 @@ def lambda_handler(event, context):
         
         # Send one SQS message per page for parallel processing
         # Use unique MessageGroupId per page to enable parallel processing
-        print(f"Queueing {total_pages} pages for parallel conversion...")
+        print(f"[DOC:{document_id}] Queueing {total_pages} pages for parallel conversion...")
         
         for page_num in range(total_pages):
             message = {
@@ -102,7 +107,7 @@ def lambda_handler(event, context):
                 MessageDeduplicationId=f"{document_id}-page-{page_num + 1}-{timestamp}"
             )
         
-        print(f"Document {document_id} queued for processing. Pages: {total_pages}")
+        print(f"[DOC:{document_id}] Document queued for processing. Pages: {total_pages}, Patient hint: {patient_name}")
     
     return {
         'statusCode': 200,

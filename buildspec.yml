@@ -1,0 +1,96 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+      nodejs: 18
+    commands:
+      - echo "Installing dependencies..."
+      - pip install --upgrade pip
+      
+  pre_build:
+    commands:
+      - echo "Pre-build phase - Packaging Lambda functions..."
+      - export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - export LAMBDA_BUCKET="${PROJECT_NAME}-${ENVIRONMENT}-lambda-code-${ACCOUNT_ID}"
+      
+      # Create Lambda code bucket if it doesn't exist
+      - aws s3 mb s3://${LAMBDA_BUCKET} --region ${AWS_REGION} || true
+      
+      # Package upload-handler
+      - cd lambdas/upload-handler
+      - zip -r upload-handler.zip lambda_function.py requirements.txt
+      - aws s3 cp upload-handler.zip s3://${LAMBDA_BUCKET}/
+      - cd ../..
+      
+      # Package pdf-converter
+      - cd lambdas/pdf-converter
+      - pip install -r requirements.txt -t .
+      - zip -r pdf-converter.zip .
+      - aws s3 cp pdf-converter.zip s3://${LAMBDA_BUCKET}/
+      - cd ../..
+      
+      # Package ai-processor
+      - cd lambdas/ai-processor
+      - pip install -r requirements.txt -t .
+      - zip -r ai-processor.zip .
+      - aws s3 cp ai-processor.zip s3://${LAMBDA_BUCKET}/
+      - cd ../..
+      
+      # Package api-handler
+      - cd lambdas/api-handler
+      - pip install -r requirements.txt -t .
+      - zip -r api-handler.zip .
+      - aws s3 cp api-handler.zip s3://${LAMBDA_BUCKET}/
+      - cd ../..
+
+  build:
+    commands:
+      - echo "Build phase - Deploying CloudFormation stack..."
+      - |
+        aws cloudformation deploy \
+          --template-file cloudformation/infrastructure.yaml \
+          --stack-name ${PROJECT_NAME}-${ENVIRONMENT} \
+          --parameter-overrides \
+            Environment=${ENVIRONMENT} \
+            ProjectName=${PROJECT_NAME} \
+          --capabilities CAPABILITY_NAMED_IAM \
+          --region ${AWS_REGION} \
+          --tags \
+            Environment=${ENVIRONMENT} \
+            Project=${PROJECT_NAME} \
+            ManagedBy=CloudFormation
+      
+      # Build frontend
+      - cd frontend
+      - npm install
+      - |
+        if [ "${ENVIRONMENT}" = "prd" ]; then
+          echo "REACT_APP_API_URL=${PRD_API_URL}" > .env
+        elif [ "${ENVIRONMENT}" = "stg" ]; then
+          echo "REACT_APP_API_URL=${STG_API_URL}" > .env
+        else
+          echo "REACT_APP_API_URL=${DEV_API_URL}" > .env
+        fi
+      - npm run build
+      - cd ..
+
+  post_build:
+    commands:
+      - echo "Post-build phase - Deployment complete"
+      - |
+        aws cloudformation describe-stacks \
+          --stack-name ${PROJECT_NAME}-${ENVIRONMENT} \
+          --region ${AWS_REGION} \
+          --query 'Stacks[0].Outputs'
+
+artifacts:
+  files:
+    - '**/*'
+  name: HealthAI-Build-$(date +%Y%m%d-%H%M%S)
+
+cache:
+  paths:
+    - '/root/.npm/**/*'
+    - '/root/.cache/pip/**/*'

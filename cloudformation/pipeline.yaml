@@ -1,0 +1,350 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CodePipeline for HealthAI - Multi-Account Deployment (Innovation -> STG -> PRD)'
+
+Parameters:
+  GitHubRepo:
+    Type: String
+    Description: GitHub repository name
+    Default: HealthAI
+  
+  GitHubOwner:
+    Type: String
+    Description: GitHub repository owner/organization
+  
+  GitHubBranch:
+    Type: String
+    Description: GitHub branch to track
+    Default: main
+  
+  GitHubToken:
+    Type: String
+    NoEcho: true
+    Description: GitHub personal access token (store in Secrets Manager)
+  
+  STGAccountId:
+    Type: String
+    Description: AWS Account ID for Staging environment
+  
+  PRDAccountId:
+    Type: String
+    Description: AWS Account ID for Production environment
+  
+  ProjectName:
+    Type: String
+    Default: HealthAI
+
+Resources:
+  # ==========================================
+  # S3 Bucket for Pipeline Artifacts
+  # ==========================================
+  PipelineArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-pipeline-artifacts-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldArtifacts
+            Status: Enabled
+            ExpirationInDays: 30
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  PipelineArtifactBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref PipelineArtifactBucket
+      PolicyDocument:
+        Statement:
+          # Allow STG account to read artifacts
+          - Sid: AllowSTGAccountRead
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${STGAccountId}:root'
+            Action:
+              - s3:GetObject
+              - s3:ListBucket
+            Resource:
+              - !GetAtt PipelineArtifactBucket.Arn
+              - !Sub '${PipelineArtifactBucket.Arn}/*'
+          # Allow PRD account to read artifacts
+          - Sid: AllowPRDAccountRead
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${PRDAccountId}:root'
+            Action:
+              - s3:GetObject
+              - s3:ListBucket
+            Resource:
+              - !GetAtt PipelineArtifactBucket.Arn
+              - !Sub '${PipelineArtifactBucket.Arn}/*'
+
+  # ==========================================
+  # CodeBuild Project
+  # ==========================================
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-CodeBuild-Role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess  # Restricted in production
+      Policies:
+        - PolicyName: CodeBuildPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource:
+                  - !Sub '${PipelineArtifactBucket.Arn}/*'
+              - Effect: Allow
+                Action:
+                  - cloudformation:*
+                  - lambda:*
+                  - dynamodb:*
+                  - s3:*
+                  - sqs:*
+                  - iam:*
+                Resource: '*'
+
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub '${ProjectName}-Build'
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        EnvironmentVariables:
+          - Name: PROJECT_NAME
+            Value: !Ref ProjectName
+          - Name: AWS_REGION
+            Value: !Ref AWS::Region
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: buildspec.yml
+      TimeoutInMinutes: 30
+
+  # ==========================================
+  # CodePipeline
+  # ==========================================
+  CodePipelineServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-CodePipeline-Role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodePipelinePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt PipelineArtifactBucket.Arn
+                  - !Sub '${PipelineArtifactBucket.Arn}/*'
+              - Effect: Allow
+                Action:
+                  - codebuild:BatchGetBuilds
+                  - codebuild:StartBuild
+                Resource: !GetAtt CodeBuildProject.Arn
+              - Effect: Allow
+                Action:
+                  - cloudformation:*
+                  - iam:PassRole
+                Resource: '*'
+              - Effect: Allow
+                Action: sts:AssumeRole
+                Resource:
+                  - !Sub 'arn:aws:iam::${STGAccountId}:role/${ProjectName}-CrossAccount-Role'
+                  - !Sub 'arn:aws:iam::${PRDAccountId}:role/${ProjectName}-CrossAccount-Role'
+
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub '${ProjectName}-Pipeline'
+      RoleArn: !GetAtt CodePipelineServiceRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref PipelineArtifactBucket
+      Stages:
+        # ==========================================
+        # Stage 1: Source
+        # ==========================================
+        - Name: Source
+          Actions:
+            - Name: SourceAction
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Provider: GitHub
+                Version: '1'
+              Configuration:
+                Owner: !Ref GitHubOwner
+                Repo: !Ref GitHubRepo
+                Branch: !Ref GitHubBranch
+                OAuthToken: !Ref GitHubToken
+                PollForSourceChanges: false
+              OutputArtifacts:
+                - Name: SourceOutput
+
+        # ==========================================
+        # Stage 2: Build (Innovation Account)
+        # ==========================================
+        - Name: Build-Innovation
+          Actions:
+            - Name: BuildAction
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+                EnvironmentVariables: |
+                  [
+                    {"name":"ENVIRONMENT","value":"dev","type":"PLAINTEXT"},
+                    {"name":"DEV_API_URL","value":"https://api-dev.example.com","type":"PLAINTEXT"}
+                  ]
+              InputArtifacts:
+                - Name: SourceOutput
+              OutputArtifacts:
+                - Name: BuildOutput
+
+        # ==========================================
+        # Stage 3: Deploy to STG (Manual Approval)
+        # ==========================================
+        - Name: Deploy-Staging
+          Actions:
+            - Name: ApprovalForStaging
+              ActionTypeId:
+                Category: Approval
+                Owner: AWS
+                Provider: Manual
+                Version: '1'
+              Configuration:
+                CustomData: 'Please review and approve deployment to Staging'
+            
+            - Name: DeployToSTG
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                StackName: !Sub '${ProjectName}-stg'
+                TemplatePath: SourceOutput::cloudformation/infrastructure.yaml
+                Capabilities: CAPABILITY_NAMED_IAM
+                ParameterOverrides: |
+                  {
+                    "Environment": "stg",
+                    "ProjectName": "HealthAI"
+                  }
+                RoleArn: !Sub 'arn:aws:iam::${STGAccountId}:role/${ProjectName}-CloudFormation-Role'
+              InputArtifacts:
+                - Name: SourceOutput
+              RoleArn: !Sub 'arn:aws:iam::${STGAccountId}:role/${ProjectName}-CrossAccount-Role'
+              RunOrder: 2
+
+        # ==========================================
+        # Stage 4: Deploy to PRD (Manual Approval)
+        # ==========================================
+        - Name: Deploy-Production
+          Actions:
+            - Name: ApprovalForProduction
+              ActionTypeId:
+                Category: Approval
+                Owner: AWS
+                Provider: Manual
+                Version: '1'
+              Configuration:
+                CustomData: 'Please review and approve deployment to Production'
+            
+            - Name: DeployToPRD
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                StackName: !Sub '${ProjectName}-prd'
+                TemplatePath: SourceOutput::cloudformation/infrastructure.yaml
+                Capabilities: CAPABILITY_NAMED_IAM
+                ParameterOverrides: |
+                  {
+                    "Environment": "prd",
+                    "ProjectName": "HealthAI"
+                  }
+                RoleArn: !Sub 'arn:aws:iam::${PRDAccountId}:role/${ProjectName}-CloudFormation-Role'
+              InputArtifacts:
+                - Name: SourceOutput
+              RoleArn: !Sub 'arn:aws:iam::${PRDAccountId}:role/${ProjectName}-CrossAccount-Role'
+              RunOrder: 2
+
+  # ==========================================
+  # GitHub Webhook
+  # ==========================================
+  PipelineWebhook:
+    Type: AWS::CodePipeline::Webhook
+    Properties:
+      Authentication: GITHUB_HMAC
+      AuthenticationConfiguration:
+        SecretToken: !Ref GitHubToken
+      Filters:
+        - JsonPath: $.ref
+          MatchEquals: refs/heads/{Branch}
+      TargetPipeline: !Ref Pipeline
+      TargetAction: SourceAction
+      TargetPipelineVersion: !GetAtt Pipeline.Version
+      RegisterWithThirdParty: true
+
+Outputs:
+  PipelineName:
+    Description: CodePipeline Name
+    Value: !Ref Pipeline
+  
+  PipelineUrl:
+    Description: CodePipeline URL
+    Value: !Sub 'https://console.aws.amazon.com/codesuite/codepipeline/pipelines/${Pipeline}/view'
+  
+  ArtifactBucket:
+    Description: S3 Bucket for Pipeline Artifacts
+    Value: !Ref PipelineArtifactBucket

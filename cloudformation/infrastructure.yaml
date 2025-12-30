@@ -1,0 +1,677 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'HealthAI Medical Document Processing Infrastructure'
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues:
+      - dev
+      - stg
+      - prd
+    Default: dev
+    Description: Environment name
+  
+  ProjectName:
+    Type: String
+    Default: HealthAI
+    Description: Project name for resource naming
+
+Mappings:
+  EnvironmentConfig:
+    dev:
+      LambdaMemory: 512
+      LambdaTimeout: 300
+      SQSVisibilityTimeout: 900
+      MaxConcurrency: 5
+    stg:
+      LambdaMemory: 1024
+      LambdaTimeout: 600
+      SQSVisibilityTimeout: 900
+      MaxConcurrency: 10
+    prd:
+      LambdaMemory: 2048
+      LambdaTimeout: 900
+      SQSVisibilityTimeout: 1200
+      MaxConcurrency: 20
+
+Resources:
+  # ==========================================
+  # S3 Buckets
+  # ==========================================
+  UploadBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-${Environment}-upload-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldVersions
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 30
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Function: !GetAtt UploadHandlerFunction.Arn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .pdf
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Project
+          Value: !Ref ProjectName
+
+  PDFBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-${Environment}-pdf-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: TransitionToIA
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 30
+                StorageClass: STANDARD_IA
+              - TransitionInDays: 90
+                StorageClass: GLACIER_IR
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  PNGBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-${Environment}-png-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteAfter7Days
+            Status: Enabled
+            ExpirationInDays: 7
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  WebPBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-${Environment}-webp-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: TransitionToGlacier
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 90
+                StorageClass: GLACIER
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ==========================================
+  # DynamoDB Tables
+  # ==========================================
+  PatientsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-${Environment}-Patients'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      AttributeDefinitions:
+        - AttributeName: PatientID
+          AttributeType: S
+        - AttributeName: SSN
+          AttributeType: S
+        - AttributeName: MRN
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PatientID
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: SSN-Index
+          KeySchema:
+            - AttributeName: SSN
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: MRN-Index
+          KeySchema:
+            - AttributeName: MRN
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  DocumentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-${Environment}-Documents'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: DocumentID
+          AttributeType: S
+        - AttributeName: PatientID
+          AttributeType: S
+      KeySchema:
+        - AttributeName: DocumentID
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: PatientDocuments-Index
+          KeySchema:
+            - AttributeName: PatientID
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  PagesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-${Environment}-Pages'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: PageID
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PageID
+          KeyType: HASH
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  MedicationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-${Environment}-Medications'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: MedicationID
+          AttributeType: S
+      KeySchema:
+        - AttributeName: MedicationID
+          KeyType: HASH
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  DiagnosesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-${Environment}-Diagnoses'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: DiagnosisID
+          AttributeType: S
+      KeySchema:
+        - AttributeName: DiagnosisID
+          KeyType: HASH
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  TestResultsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-${Environment}-TestResults'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: TestResultID
+          AttributeType: S
+      KeySchema:
+        - AttributeName: TestResultID
+          KeyType: HASH
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  CategoriesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-${Environment}-Categories'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: CategoryID
+          AttributeType: S
+      KeySchema:
+        - AttributeName: CategoryID
+          KeyType: HASH
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  NPITable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-${Environment}-NPI'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: NPI
+          AttributeType: S
+        - AttributeName: ProviderName
+          AttributeType: S
+      KeySchema:
+        - AttributeName: NPI
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: ProviderNameIndex
+          KeySchema:
+            - AttributeName: ProviderName
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ==========================================
+  # SQS Queues
+  # ==========================================
+  ProcessingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${ProjectName}-${Environment}-processing.fifo'
+      FifoQueue: true
+      ContentBasedDeduplication: false
+      MessageRetentionPeriod: 86400
+      VisibilityTimeout: !FindInMap [EnvironmentConfig, !Ref Environment, SQSVisibilityTimeout]
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ProcessingDLQ.Arn
+        maxReceiveCount: 5
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  ProcessingDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${ProjectName}-${Environment}-processing-dlq.fifo'
+      FifoQueue: true
+      MessageRetentionPeriod: 1209600  # 14 days
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  AIProcessingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${ProjectName}-${Environment}-ai-processing.fifo'
+      FifoQueue: true
+      ContentBasedDeduplication: false
+      MessageRetentionPeriod: 86400
+      VisibilityTimeout: !FindInMap [EnvironmentConfig, !Ref Environment, SQSVisibilityTimeout]
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt AIProcessingDLQ.Arn
+        maxReceiveCount: 5
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  AIProcessingDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${ProjectName}-${Environment}-ai-processing-dlq.fifo'
+      FifoQueue: true
+      MessageRetentionPeriod: 1209600
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ==========================================
+  # IAM Roles
+  # ==========================================
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-Lambda-Role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: HealthAILambdaPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # S3 Access
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub '${UploadBucket.Arn}/*'
+                  - !Sub '${PDFBucket.Arn}/*'
+                  - !Sub '${PNGBucket.Arn}/*'
+                  - !Sub '${WebPBucket.Arn}/*'
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt UploadBucket.Arn
+                  - !GetAtt PDFBucket.Arn
+                  - !GetAtt PNGBucket.Arn
+                  - !GetAtt WebPBucket.Arn
+              # DynamoDB Access
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource:
+                  - !GetAtt PatientsTable.Arn
+                  - !GetAtt DocumentsTable.Arn
+                  - !GetAtt PagesTable.Arn
+                  - !GetAtt MedicationsTable.Arn
+                  - !GetAtt DiagnosesTable.Arn
+                  - !GetAtt TestResultsTable.Arn
+                  - !GetAtt CategoriesTable.Arn
+                  - !GetAtt NPITable.Arn
+                  - !Sub '${PatientsTable.Arn}/index/*'
+                  - !Sub '${DocumentsTable.Arn}/index/*'
+                  - !Sub '${NPITable.Arn}/index/*'
+              # SQS Access
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource:
+                  - !GetAtt ProcessingQueue.Arn
+                  - !GetAtt AIProcessingQueue.Arn
+                  - !GetAtt ProcessingDLQ.Arn
+                  - !GetAtt AIProcessingDLQ.Arn
+              # Bedrock Access
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource: '*'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ==========================================
+  # Lambda Functions
+  # ==========================================
+  UploadHandlerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${Environment}-upload-handler'
+      Runtime: python3.11
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: !FindInMap [EnvironmentConfig, !Ref Environment, LambdaTimeout]
+      MemorySize: !FindInMap [EnvironmentConfig, !Ref Environment, LambdaMemory]
+      Code:
+        S3Bucket: !Sub '${ProjectName}-${Environment}-lambda-code-${AWS::AccountId}'
+        S3Key: upload-handler.zip
+      Environment:
+        Variables:
+          UPLOAD_BUCKET: !Ref UploadBucket
+          PDF_BUCKET: !Ref PDFBucket
+          PROCESSING_QUEUE_URL: !Ref ProcessingQueue
+          DOCUMENTS_TABLE: !Ref DocumentsTable
+          ENVIRONMENT: !Ref Environment
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  UploadHandlerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref UploadHandlerFunction
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !GetAtt UploadBucket.Arn
+
+  PDFConverterFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${Environment}-pdf-converter'
+      Runtime: python3.11
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: !FindInMap [EnvironmentConfig, !Ref Environment, LambdaTimeout]
+      MemorySize: !FindInMap [EnvironmentConfig, !Ref Environment, LambdaMemory]
+      Code:
+        S3Bucket: !Sub '${ProjectName}-${Environment}-lambda-code-${AWS::AccountId}'
+        S3Key: pdf-converter.zip
+      Environment:
+        Variables:
+          PDF_BUCKET: !Ref PDFBucket
+          PNG_BUCKET: !Ref PNGBucket
+          WEBP_BUCKET: !Ref WebPBucket
+          AI_QUEUE_URL: !Ref AIProcessingQueue
+          PAGES_TABLE: !Ref PagesTable
+          DOCUMENTS_TABLE: !Ref DocumentsTable
+          ENVIRONMENT: !Ref Environment
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  PDFConverterEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      FunctionName: !Ref PDFConverterFunction
+      EventSourceArn: !GetAtt ProcessingQueue.Arn
+      BatchSize: 1
+      ScalingConfig:
+        MaximumConcurrency: !FindInMap [EnvironmentConfig, !Ref Environment, MaxConcurrency]
+
+  AIProcessorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${Environment}-ai-processor'
+      Runtime: python3.11
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: !FindInMap [EnvironmentConfig, !Ref Environment, LambdaTimeout]
+      MemorySize: !FindInMap [EnvironmentConfig, !Ref Environment, LambdaMemory]
+      Code:
+        S3Bucket: !Sub '${ProjectName}-${Environment}-lambda-code-${AWS::AccountId}'
+        S3Key: ai-processor.zip
+      Environment:
+        Variables:
+          PATIENTS_TABLE: !Ref PatientsTable
+          DOCUMENTS_TABLE: !Ref DocumentsTable
+          PAGES_TABLE: !Ref PagesTable
+          MEDICATIONS_TABLE: !Ref MedicationsTable
+          DIAGNOSES_TABLE: !Ref DiagnosesTable
+          TEST_RESULTS_TABLE: !Ref TestResultsTable
+          CATEGORIES_TABLE: !Ref CategoriesTable
+          NPI_TABLE: !Ref NPITable
+          WEBP_BUCKET: !Ref WebPBucket
+          ENVIRONMENT: !Ref Environment
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  AIProcessorEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      FunctionName: !Ref AIProcessorFunction
+      EventSourceArn: !GetAtt AIProcessingQueue.Arn
+      BatchSize: 1
+      ScalingConfig:
+        MaximumConcurrency: !FindInMap [EnvironmentConfig, !Ref Environment, MaxConcurrency]
+
+  APIHandlerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${Environment}-api-handler'
+      Runtime: python3.11
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 512
+      Code:
+        S3Bucket: !Sub '${ProjectName}-${Environment}-lambda-code-${AWS::AccountId}'
+        S3Key: api-handler.zip
+      Environment:
+        Variables:
+          PATIENTS_TABLE: !Ref PatientsTable
+          DOCUMENTS_TABLE: !Ref DocumentsTable
+          PAGES_TABLE: !Ref PagesTable
+          MEDICATIONS_TABLE: !Ref MedicationsTable
+          DIAGNOSES_TABLE: !Ref DiagnosesTable
+          TEST_RESULTS_TABLE: !Ref TestResultsTable
+          CATEGORIES_TABLE: !Ref CategoriesTable
+          NPI_TABLE: !Ref NPITable
+          UPLOAD_BUCKET: !Ref UploadBucket
+          PDF_BUCKET: !Ref PDFBucket
+          PNG_BUCKET: !Ref PNGBucket
+          WEBP_BUCKET: !Ref WebPBucket
+          ENVIRONMENT: !Ref Environment
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ==========================================
+  # CloudWatch Alarms
+  # ==========================================
+  AIProcessorErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-AIProcessor-Errors'
+      AlarmDescription: Alert when AI Processor has errors
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AIProcessorFunction
+
+  DLQMessageAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-DLQ-Messages'
+      AlarmDescription: Alert when messages appear in DLQ
+      MetricName: ApproximateNumberOfMessagesVisible
+      Namespace: AWS/SQS
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt AIProcessingDLQ.QueueName
+
+Outputs:
+  UploadBucketName:
+    Description: Upload S3 Bucket Name
+    Value: !Ref UploadBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-UploadBucket'
+
+  PDFBucketName:
+    Description: PDF S3 Bucket Name
+    Value: !Ref PDFBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-PDFBucket'
+
+  APIFunctionArn:
+    Description: API Handler Lambda Function ARN
+    Value: !GetAtt APIHandlerFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-APIFunctionArn'
+
+  ProcessingQueueUrl:
+    Description: Processing Queue URL
+    Value: !Ref ProcessingQueue
+    Export:
+      Name: !Sub '${AWS::StackName}-ProcessingQueue'
+
+  AIProcessingQueueUrl:
+    Description: AI Processing Queue URL
+    Value: !Ref AIProcessingQueue
+    Export:
+      Name: !Sub '${AWS::StackName}-AIProcessingQueue'

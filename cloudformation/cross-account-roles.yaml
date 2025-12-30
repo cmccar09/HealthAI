@@ -1,0 +1,77 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Cross-Account IAM Roles for HealthAI Pipeline (Deploy in STG and PRD accounts)'
+
+Parameters:
+  InnovationAccountId:
+    Type: String
+    Description: AWS Account ID of Innovation account where CodePipeline runs
+  
+  ProjectName:
+    Type: String
+    Default: HealthAI
+
+Resources:
+  # ==========================================
+  # Cross-Account Role for CodePipeline
+  # ==========================================
+  CrossAccountRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-CrossAccount-Role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${InnovationAccountId}:root'
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CrossAccountPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:*
+                  - s3:*
+                  - iam:PassRole
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource:
+                  - !Sub 'arn:aws:s3:::${ProjectName}-pipeline-artifacts-${InnovationAccountId}/*'
+
+  # ==========================================
+  # CloudFormation Execution Role
+  # ==========================================
+  CloudFormationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-CloudFormation-Role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+          - Effect: Allow
+            Principal:
+              AWS: !GetAtt CrossAccountRole.Arn
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess  # Restrict in production
+
+Outputs:
+  CrossAccountRoleArn:
+    Description: Cross-Account Role ARN
+    Value: !GetAtt CrossAccountRole.Arn
+    Export:
+      Name: !Sub '${ProjectName}-CrossAccountRoleArn'
+  
+  CloudFormationRoleArn:
+    Description: CloudFormation Execution Role ARN
+    Value: !GetAtt CloudFormationRole.Arn
+    Export:
+      Name: !Sub '${ProjectName}-CloudFormationRoleArn'

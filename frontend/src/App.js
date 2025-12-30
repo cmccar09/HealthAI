@@ -33,13 +33,15 @@ function App() {
       <div className="App">
         <header className="app-header">
           <div className="header-content">
-            <h1>🏥 MED POC</h1>
-            <p>Medical Document Intelligence Platform</p>
+            <h1>⚕️ iMed2 Medical Records System</h1>
+            <p>Powered by HealthAI - Advanced Medical Intelligence</p>
           </div>
         </header>
         
         <Routes>
-          <Route path="/" element={<DocumentList />} />
+          <Route path="/" element={<PatientSearch />} />
+          <Route path="/patient/:patientId" element={<PatientDashboard />} />
+          <Route path="/documents" element={<DocumentList />} />
           <Route path="/document/:documentId" element={<DocumentDashboard />} />
           <Route path="/document/:documentId/patient" element={<PatientSummary />} />
           <Route path="/document/:documentId/medications" element={<MedicationsPage />} />
@@ -51,6 +53,1926 @@ function App() {
         </Routes>
       </div>
     </Router>
+  );
+}
+
+// Patient Search Component (Home Page)
+function PatientSearch() {
+  const [searchParams, setSearchParams] = useState({
+    firstName: '',
+    lastName: '',
+    dob: '',
+    mrn: '',
+    addressLine1: '',
+    city: '',
+    state: '',
+    postCode: ''
+  });
+  const [patients, setPatients] = useState([]);
+  const [searchPerformed, setSearchPerformed] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      // Search across all patients in the database
+      const command = new ScanCommand({
+        TableName: 'HealthAI-Patients'
+      });
+      const response = await docClient.send(command);
+      let results = response.Items || [];
+      
+      // Filter based on search parameters
+      if (searchParams.firstName) {
+        results = results.filter(p => 
+          p.patient_first_name?.toLowerCase().includes(searchParams.firstName.toLowerCase()) ||
+          p.name?.first_name?.toLowerCase().includes(searchParams.firstName.toLowerCase())
+        );
+      }
+      if (searchParams.lastName) {
+        results = results.filter(p => 
+          p.patient_last_name?.toLowerCase().includes(searchParams.lastName.toLowerCase()) ||
+          p.name?.last_name?.toLowerCase().includes(searchParams.lastName.toLowerCase())
+        );
+      }
+      if (searchParams.dob) {
+        results = results.filter(p => 
+          p.patient_dob === searchParams.dob || 
+          p.demographics?.date_of_birth === searchParams.dob
+        );
+      }
+      if (searchParams.mrn) {
+        results = results.filter(p => 
+          p.patient_mrn?.includes(searchParams.mrn) ||
+          p.mrn?.includes(searchParams.mrn)
+        );
+      }
+      
+      setPatients(results);
+      setSearchPerformed(true);
+    } catch (error) {
+      console.error('Error searching patients:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInputChange = (field, value) => {
+    setSearchParams(prev => ({ ...prev, [field]: value }));
+  };
+
+  return (
+    <div className="patient-search-container">
+      <div className="search-tabs">
+        <div className="tab active">Patient Search</div>
+        <div className="tab">Client Confirmation</div>
+      </div>
+      
+      <div className="search-content">
+        <h2 className="system-title">iMed2 Medical Records System</h2>
+        
+        <div className="search-section">
+          <h3>Patient Search</h3>
+          
+          <form onSubmit={handleSearch} className="search-form">
+            <div className="form-row">
+              <div className="form-group">
+                <label>First Name</label>
+                <input 
+                  type="text" 
+                  value={searchParams.firstName}
+                  onChange={(e) => handleInputChange('firstName', e.target.value)}
+                  placeholder="First name"
+                />
+              </div>
+              <div className="form-group">
+                <label>MRN</label>
+                <input 
+                  type="text" 
+                  value={searchParams.mrn}
+                  onChange={(e) => handleInputChange('mrn', e.target.value)}
+                  placeholder="Medical Record Number"
+                />
+              </div>
+              <div className="form-group">
+                <label>State</label>
+                <input 
+                  type="text" 
+                  value={searchParams.state}
+                  onChange={(e) => handleInputChange('state', e.target.value)}
+                  placeholder="State"
+                />
+              </div>
+            </div>
+            
+            <div className="form-row">
+              <div className="form-group">
+                <label>Last Name</label>
+                <input 
+                  type="text" 
+                  value={searchParams.lastName}
+                  onChange={(e) => handleInputChange('lastName', e.target.value)}
+                  placeholder="Last name"
+                />
+              </div>
+              <div className="form-group">
+                <label>Address Line 1</label>
+                <input 
+                  type="text" 
+                  value={searchParams.addressLine1}
+                  onChange={(e) => handleInputChange('addressLine1', e.target.value)}
+                  placeholder="Address"
+                />
+              </div>
+              <div className="form-group">
+                <label>Post Code</label>
+                <input 
+                  type="text" 
+                  value={searchParams.postCode}
+                  onChange={(e) => handleInputChange('postCode', e.target.value)}
+                  placeholder="Postal code"
+                />
+              </div>
+            </div>
+            
+            <div className="form-row">
+              <div className="form-group">
+                <label>Date of Birth</label>
+                <input 
+                  type="text" 
+                  value={searchParams.dob}
+                  onChange={(e) => handleInputChange('dob', e.target.value)}
+                  placeholder="MM/DD/YYYY"
+                />
+              </div>
+              <div className="form-group">
+                <label>City</label>
+                <input 
+                  type="text" 
+                  value={searchParams.city}
+                  onChange={(e) => handleInputChange('city', e.target.value)}
+                  placeholder="City"
+                />
+              </div>
+              <div className="form-group"></div>
+            </div>
+            
+            <button type="submit" className="search-button" disabled={loading}>
+              {loading ? 'Searching...' : 'Search'}
+            </button>
+          </form>
+          
+          {searchPerformed && (
+            <div className="search-results">
+              <div className="results-message">
+                Found {patients.length} matching patient(s) in the database
+              </div>
+              
+              {patients.length > 0 && (
+                <div className="results-table-container">
+                  <table className="results-table">
+                    <thead>
+                      <tr>
+                        <th>first_name</th>
+                        <th>last_name</th>
+                        <th>date_of_birth</th>
+                        <th>patient_id</th>
+                        <th>gender</th>
+                        <th>email</th>
+                        <th>phone_number</th>
+                        <th>address</th>
+                        <th>city</th>
+                        <th>state</th>
+                        <th>postcode</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {patients.map((patient, idx) => (
+                        <tr key={idx} onClick={() => navigate(`/patient/${patient.patient_id || patient.document_id}`)} className="clickable-row">
+                          <td className="link-cell">{patient.patient_first_name || patient.name?.first_name || 'None'}</td>
+                          <td>{patient.patient_last_name || patient.name?.last_name || 'None'}</td>
+                          <td>{patient.patient_dob || patient.demographics?.date_of_birth || 'None'}</td>
+                          <td>{patient.patient_id || patient.document_id || 'None'}</td>
+                          <td>{patient.gender || patient.demographics?.gender || 'None'}</td>
+                          <td>{patient.email || patient.contact?.email || 'None'}</td>
+                          <td>{patient.phone_number || patient.contact?.phone || 'None'}</td>
+                          <td>{patient.address_line1 || patient.contact?.address?.street || 'None'}</td>
+                          <td>{patient.city || patient.contact?.address?.city || 'None'}</td>
+                          <td>{patient.state || patient.contact?.address?.state || 'None'}</td>
+                          <td>{patient.postal_code || patient.contact?.address?.postal_code || 'None'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Patient Dashboard Component with Tabs
+function PatientDashboard() {
+  const { patientId } = useParams();
+  const [activeTab, setActiveTab] = useState('documents');
+  const [patient, setPatient] = useState(null);
+  const [medications, setMedications] = useState([]);
+  const [diagnoses, setDiagnoses] = useState([]);
+  const [testResults, setTestResults] = useState([]);
+  const [procedures, setProcedures] = useState([]);
+  const [radiology, setRadiology] = useState([]);
+  const [familyHistory, setFamilyHistory] = useState([]);
+  const [socialHistory, setSocialHistory] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchPatientData();
+  }, [patientId]);
+
+  const fetchPatientData = async () => {
+    try {
+      // Fetch patient info
+      const patientRes = await docClient.send(new ScanCommand({
+        TableName: 'HealthAI-Patients',
+        FilterExpression: 'patient_id = :pid OR document_id = :pid',
+        ExpressionAttributeValues: { ':pid': patientId }
+      }));
+      const patientData = patientRes.Items?.[0];
+      setPatient(patientData);
+
+      // Use document_id for fetching related data (medications, diagnoses, tests)
+      const documentId = patientData?.document_id || patientId;
+      console.log('Fetching data for document_id:', documentId);
+
+      // Fetch all data in parallel
+      const [medsRes, diagRes, testsRes, procsRes, radRes, famHistRes] = await Promise.all([
+        docClient.send(new ScanCommand({
+          TableName: 'HealthAI-Medications',
+          FilterExpression: 'document_id = :docId',
+          ExpressionAttributeValues: { ':docId': documentId }
+        })),
+        docClient.send(new ScanCommand({
+          TableName: 'HealthAI-Diagnoses',
+          FilterExpression: 'document_id = :docId',
+          ExpressionAttributeValues: { ':docId': documentId }
+        })),
+        docClient.send(new ScanCommand({
+          TableName: 'HealthAI-TestResults',
+          FilterExpression: 'document_id = :docId',
+          ExpressionAttributeValues: { ':docId': documentId }
+        })),
+        docClient.send(new ScanCommand({
+          TableName: 'HealthAI-Procedures',
+          FilterExpression: 'document_id = :docId',
+          ExpressionAttributeValues: { ':docId': documentId }
+        })),
+        docClient.send(new ScanCommand({
+          TableName: 'HealthAI-Radiology',
+          FilterExpression: 'document_id = :docId',
+          ExpressionAttributeValues: { ':docId': documentId }
+        })),
+        docClient.send(new ScanCommand({
+          TableName: 'HealthAI-FamilyHistory',
+          FilterExpression: 'document_id = :docId',
+          ExpressionAttributeValues: { ':docId': documentId }
+        }))
+      ]);
+
+      setMedications(medsRes.Items || []);
+      setDiagnoses(diagRes.Items || []);
+      setTestResults(testsRes.Items || []);
+      setProcedures(procsRes.Items || []);
+      setRadiology(radRes.Items || []);
+      
+      // Separate family history and social history
+      const famHistItems = famHistRes.Items || [];
+      const socialHistItem = famHistItems.find(item => item.record_type === 'social_history');
+      const familyHistItems = famHistItems.filter(item => item.record_type !== 'social_history');
+      
+      setFamilyHistory(familyHistItems);
+      setSocialHistory(socialHistItem);
+    } catch (error) {
+      console.error('Error fetching patient data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <div className="loading">Loading patient data for ID: {patientId}</div>;
+  if (!patient) return <div className="error">Patient not found</div>;
+
+  const firstName = patient.patient_first_name || patient.name?.first_name || 'Unknown';
+  const lastName = patient.patient_last_name || patient.name?.last_name || 'Unknown';
+
+  return (
+    <div className="patient-dashboard">
+      <div className="patient-header">
+        <div className="header-section">
+          <h1>Patient - {firstName.toLowerCase()} {lastName.toLowerCase()}</h1>
+        </div>
+      </div>
+      
+      <div className="patient-info-grid">
+        <div className="info-column">
+          <h3>Personal Information</h3>
+          <div className="info-item"><strong>DOB:</strong> {patient.patient_dob || patient.demographics?.date_of_birth || 'None'}</div>
+          <div className="info-item"><strong>Gender:</strong> {patient.gender || patient.demographics?.gender || 'None'}</div>
+          <div className="info-item"><strong>Blood Type:</strong> {patient.blood_type || patient.demographics?.blood_type || 'None'}</div>
+          <div className="info-item"><strong>SSN:</strong> {patient.patient_ssn || patient.demographics?.ssn || 'None'}</div>
+          <div className="info-item"><strong>MRN:</strong> {patient.patient_mrn || patient.mrn || 'None'}</div>
+        </div>
+        
+        <div className="info-column">
+          <h3>Contact Information</h3>
+          <div className="info-item"><strong>Email:</strong> {patient.email || patient.contact?.email || 'None'}</div>
+          <div className="info-item"><strong>Phone:</strong> {patient.phone_number || patient.contact?.phone || 'None'}</div>
+          <div className="info-item"><strong>Address:</strong> {patient.address_line1 || patient.contact?.address?.street || 'None'}</div>
+          <div className="info-item"><strong>City:</strong> {patient.city || patient.contact?.address?.city || 'None'} <strong>State:</strong> {patient.state || patient.contact?.address?.state || 'None'} <strong>Postal Code:</strong> {patient.postal_code || patient.contact?.address?.postal_code || 'None'}</div>
+          <div className="info-item"><strong>Country:</strong> {patient.country || patient.contact?.address?.country || 'None'}</div>
+        </div>
+        
+        <div className="info-column">
+          <h3>Emergency Contact & Medical Info</h3>
+          <div className="info-item"><strong>Name:</strong> {patient.emergency_contact_name || patient.emergency_contact?.name || 'None'}</div>
+          <div className="info-item"><strong>Phone:</strong> {patient.emergency_contact_phone || patient.emergency_contact?.phone || 'None'}</div>
+          <div className="info-item"><strong>Allergies:</strong> {Array.isArray(patient.allergies) ? patient.allergies.join(', ') : (patient.allergies || 'None')}</div>
+          <div className="info-item"><strong>Medical Facility:</strong> {patient.medical_facility || 'None'}</div>
+        </div>
+      </div>
+      
+      <div className="tab-navigation">
+        <button className={activeTab === 'documents' ? 'tab-button active' : 'tab-button'} onClick={() => setActiveTab('documents')}>Documents</button>
+        <button className={activeTab === 'tests' ? 'tab-button active' : 'tab-button'} onClick={() => setActiveTab('tests')}>Tests</button>
+        <button className={activeTab === 'diagnosis' ? 'tab-button active' : 'tab-button'} onClick={() => setActiveTab('diagnosis')}>Diagnosis</button>
+        <button className={activeTab === 'medicines' ? 'tab-button active' : 'tab-button'} onClick={() => setActiveTab('medicines')}>Medicines</button>
+        <button className={activeTab === 'procedures' ? 'tab-button active' : 'tab-button'} onClick={() => setActiveTab('procedures')}>Procedures & Surgery</button>
+        <button className={activeTab === 'radiology' ? 'tab-button active' : 'tab-button'} onClick={() => setActiveTab('radiology')}>Radiology</button>
+        <button className={activeTab === 'family' ? 'tab-button active' : 'tab-button'} onClick={() => setActiveTab('family')}>Social/Family History</button>
+        <button className={activeTab === 'summary' ? 'tab-button active' : 'tab-button'} onClick={() => setActiveTab('summary')}>Medical Summary</button>
+      </div>
+      
+      <div className="tab-content">
+        {activeTab === 'documents' && <DocumentsTab patientId={patientId} />}
+        {activeTab === 'tests' && <TestsTab testResults={testResults} patientId={patientId} />}
+        {activeTab === 'diagnosis' && <DiagnosisTab diagnoses={diagnoses} />}
+        {activeTab === 'medicines' && <MedicinesTab medications={medications} />}
+        {activeTab === 'procedures' && <ProceduresTab procedures={procedures} />}
+        {activeTab === 'radiology' && <RadiologyTab radiology={radiology} />}
+        {activeTab === 'family' && <FamilyHistoryTab familyHistory={familyHistory} socialHistory={socialHistory} />}
+        {activeTab === 'summary' && <MedicalSummaryTab medications={medications} diagnoses={diagnoses} testResults={testResults} patientId={patientId} />}
+      </div>
+    </div>
+  );
+}
+
+// Tests Tab Component
+function TestsTab({ testResults, patientId }) {
+  // Get unique test dates and sort them
+  const uniqueDates = [...new Set(testResults.map(t => t.test_date || t.date))].filter(Boolean).sort();
+  
+  // Get unique test names
+  const uniqueTestNames = [...new Set(testResults.map(t => t.test_name || t.name))].filter(Boolean).sort();
+
+  // Group results by test name for easier lookup
+  const resultsByTest = {};
+  testResults.forEach(test => {
+    const testName = test.test_name || test.name;
+    if (!testName) return;
+    
+    if (!resultsByTest[testName]) {
+      resultsByTest[testName] = {};
+    }
+    
+    const date = test.test_date || test.date;
+    if (date) {
+      resultsByTest[testName][date] = test;
+    }
+  });
+
+  return (
+    <div className="tests-content">
+      <h2>Lab Test Results</h2>
+      <div className="loading-message">Loading lab test results for patient ID: {patientId}</div>
+      <button className="download-pdf-btn">Download as PDF</button>
+      
+      {testResults.length > 0 ? (
+        <div className="test-results-table-container">
+          <table className="medical-table lab-results-table">
+            <thead>
+              <tr>
+                <th className="test-name-col">Test Name</th>
+                {uniqueDates.map((date, idx) => (
+                  <th key={idx} className="date-col">{date}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {uniqueTestNames.map((testName, idx) => {
+                const testData = resultsByTest[testName];
+                
+                return (
+                  <tr key={idx}>
+                    <td className="test-name-cell">
+                      <strong>{testName}</strong>
+                      {testData && Object.values(testData)[0]?.unit && (
+                        <span className="test-unit"> ({Object.values(testData)[0].unit})</span>
+                      )}
+                    </td>
+                    {uniqueDates.map((date, dateIdx) => {
+                      const result = testData?.[date];
+                      const value = result?.result_value || result?.result || result?.value || '';
+                      const isAbnormal = result?.is_abnormal === 'Yes' || result?.abnormal === true;
+                      
+                      return (
+                        <td key={dateIdx} className={isAbnormal ? 'abnormal-value' : 'normal-value'}>
+                          {value ? (
+                            <>
+                              {value}
+                              {result?.unit && ` ${result.unit}`}
+                              {isAbnormal && <span className="abnormal-flag"> ⚠️</span>}
+                            </>
+                          ) : (
+                            <span className="no-data">-</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          
+          {testResults.length > 0 && (
+            <div className="test-results-summary">
+              <p><strong>Total Tests:</strong> {uniqueTestNames.length}</p>
+              <p><strong>Test Dates:</strong> {uniqueDates.length}</p>
+              <p><strong>Total Results:</strong> {testResults.length}</p>
+              <p><strong>Abnormal Results:</strong> {testResults.filter(t => t.is_abnormal === 'Yes' || t.abnormal === true).length}</p>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="no-data-message">No test results available</div>
+      )}
+    </div>
+  );
+}
+
+// Diagnosis Tab Component  
+function DiagnosisTab({ diagnoses }) {
+  const [selectedDiagImage, setSelectedDiagImage] = useState(null);
+  const [diagImageUrl, setDiagImageUrl] = useState(null);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [selectedDiagnosis, setSelectedDiagnosis] = useState(null);
+  const [diagnosisHistory, setDiagnosisHistory] = useState([]);
+
+  const viewDiagnosisPage = async (diagnosis) => {
+    if (!diagnosis.page_id) {
+      alert('No page information available for this diagnosis');
+      return;
+    }
+
+    try {
+      // Fetch page details
+      const pageRes = await docClient.send(new ScanCommand({
+        TableName: 'HealthAI-Pages',
+        FilterExpression: 'page_id = :pageId',
+        ExpressionAttributeValues: { ':pageId': diagnosis.page_id }
+      }));
+      
+      const page = pageRes.Items?.[0];
+      if (page && page.webp_s3_key) {
+        // Generate presigned URL
+        const command = new GetObjectCommand({
+          Bucket: S3_BUCKET,
+          Key: page.webp_s3_key
+        });
+        const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+        setDiagImageUrl(url);
+        setSelectedDiagImage({ ...page, diagnosis });
+        setZoomLevel(1);
+      } else {
+        alert('Page image not available');
+      }
+    } catch (error) {
+      console.error('Error fetching diagnosis page:', error);
+      alert('Error loading page image');
+    }
+  };
+
+  const viewDiagnosisDetails = async (diagnosis, allDiagnoses) => {
+    // Get all occurrences of this diagnosis
+    const diagDesc = diagnosis.diagnosis_description;
+    const occurrences = allDiagnoses.filter(d => d.diagnosis_description === diagDesc);
+    
+    // Get page details for each occurrence
+    const historyWithPages = await Promise.all(occurrences.map(async (diag) => {
+      try {
+        const pageRes = await docClient.send(new ScanCommand({
+          TableName: 'HealthAI-Pages',
+          FilterExpression: 'page_id = :pageId',
+          ExpressionAttributeValues: { ':pageId': diag.page_id }
+        }));
+        const page = pageRes.Items?.[0];
+        return { ...diag, page_number: page?.page_number || 'Unknown' };
+      } catch (error) {
+        return { ...diag, page_number: 'Unknown' };
+      }
+    }));
+
+    setSelectedDiagnosis({
+      description: diagDesc,
+      code: diagnosis.diagnosis_code,
+      summary: diagnosis.summary || diagnosis.notes || 'No detailed summary available',
+      first_diagnosed: occurrences[0]?.diagnosed_date || 'Unknown',
+      last_diagnosed: occurrences[occurrences.length - 1]?.diagnosed_date || 'Unknown',
+      occurrences: occurrences.length,
+      history: historyWithPages
+    });
+    setDiagnosisHistory(historyWithPages);
+  };
+
+  const closeDiagModal = () => {
+    setSelectedDiagImage(null);
+    setDiagImageUrl(null);
+    setZoomLevel(1);
+  };
+
+  const closeDiagnosisDetails = () => {
+    setSelectedDiagnosis(null);
+    setDiagnosisHistory([]);
+  };
+
+  const handleZoomIn = () => {
+    setZoomLevel(prev => Math.min(prev + 0.5, 3));
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel(prev => Math.max(prev - 0.5, 0.5));
+  };
+
+  // Group diagnoses by similar conditions
+  const groupDiagnoses = (diagList) => {
+    const groups = {};
+    
+    diagList.forEach(diag => {
+      const desc = diag.diagnosis_description || 'Unknown';
+      
+      // Define grouping keywords - group by primary condition
+      let groupKey = 'Other Conditions';
+      
+      // Prostate Cancer related
+      if (desc.toLowerCase().includes('prostate') && 
+          (desc.toLowerCase().includes('cancer') || desc.toLowerCase().includes('adenocarcinoma') || 
+           desc.toLowerCase().includes('carcinoma') || desc.toLowerCase().includes('malign') ||
+           desc.toLowerCase().includes('gleason') || desc.toLowerCase().includes('metastatic'))) {
+        groupKey = 'Prostate Cancer & Related';
+      }
+      // Diabetes
+      else if (desc.toLowerCase().includes('diabetes') || desc.toLowerCase().includes('diabetic')) {
+        groupKey = 'Diabetes Mellitus';
+      }
+      // Cardiovascular
+      else if (desc.toLowerCase().includes('heart') || desc.toLowerCase().includes('cardiac') || 
+               desc.toLowerCase().includes('coronary') || desc.toLowerCase().includes('atherosclerotic')) {
+        groupKey = 'Cardiovascular';
+      }
+      // Erectile dysfunction
+      else if (desc.toLowerCase().includes('erectile')) {
+        groupKey = 'Erectile Dysfunction';
+      }
+      // Hypertension
+      else if (desc.toLowerCase().includes('hypertension') || desc.toLowerCase().includes('blood pressure')) {
+        groupKey = 'Hypertension';
+      }
+      // Hyperlipidemia/Cholesterol
+      else if (desc.toLowerCase().includes('lipid') || desc.toLowerCase().includes('cholesterol') || 
+               desc.toLowerCase().includes('triglyceride')) {
+        groupKey = 'Lipid Disorders';
+      }
+      // Benign prostate conditions
+      else if (desc.toLowerCase().includes('prostate') && desc.toLowerCase().includes('benign')) {
+        groupKey = 'Benign Prostate';
+      }
+      // Bladder/Urinary
+      else if (desc.toLowerCase().includes('bladder') || desc.toLowerCase().includes('urinary') || 
+               desc.toLowerCase().includes('nocturia') || desc.toLowerCase().includes('dysuria')) {
+        groupKey = 'Bladder & Urinary';
+      }
+      // Musculoskeletal
+      else if (desc.toLowerCase().includes('joint') || desc.toLowerCase().includes('spine') || 
+               desc.toLowerCase().includes('degenerative') || desc.toLowerCase().includes('knee') ||
+               desc.toLowerCase().includes('hip')) {
+        groupKey = 'Musculoskeletal';
+      }
+      // Mental Health
+      else if (desc.toLowerCase().includes('anxiety') || desc.toLowerCase().includes('depression') || 
+               desc.toLowerCase().includes('sleep')) {
+        groupKey = 'Mental Health';
+      }
+      // Gastrointestinal
+      else if (desc.toLowerCase().includes('gallbladder') || desc.toLowerCase().includes('cholelithiasis') || 
+               desc.toLowerCase().includes('diverticulosis')) {
+        groupKey = 'Gastrointestinal';
+      }
+      // Obesity
+      else if (desc.toLowerCase().includes('obesity') || desc.toLowerCase().includes('obese')) {
+        groupKey = 'Obesity';
+      }
+      
+      if (!groups[groupKey]) {
+        groups[groupKey] = [];
+      }
+      groups[groupKey].push(diag);
+    });
+    
+    return groups;
+  };
+
+  const groupedDiagnoses = groupDiagnoses(diagnoses);
+  const totalGroups = Object.keys(groupedDiagnoses).length;
+  
+  return (
+    <div className="diagnosis-content">
+      <h2>Diagnosis Overview</h2>
+      <p className="diagnosis-summary">{diagnoses.length} diagnoses grouped into {totalGroups} categories</p>
+      <button className="download-reports-btn">📄 Download All Reports</button>
+      
+      {diagnoses.length > 0 ? (
+        <div className="diagnosis-groups-container">
+          {Object.entries(groupedDiagnoses).map(([groupName, groupDiagnoses]) => (
+            <div key={groupName} className="diagnosis-group">
+              <h3 className="group-header">
+                {groupName} <span className="group-count">({groupDiagnoses.length})</span>
+              </h3>
+              <div className="diagnosis-cards">
+                {groupDiagnoses.map((diagnosis, idx) => {
+                  // Count occurrences of this diagnosis
+                  const diagDesc = diagnosis.diagnosis_description;
+                  const occurrenceCount = diagnoses.filter(d => d.diagnosis_description === diagDesc).length;
+                  
+                  return (
+                    <div key={idx} className="diagnosis-card">
+                      <div className="diagnosis-card-header">
+                        <div className="diagnosis-title-row">
+                          <h4>{diagnosis.diagnosis_description || diagnosis.condition || 'Unknown Diagnosis'}</h4>
+                        </div>
+                        <div className="diagnosis-actions">
+                          <span className="star-icon">⭐</span>
+                          <span className="time-indicator">7d</span>
+                        </div>
+                      </div>
+                      <div className="diagnosis-summary-text">
+                        <p>{diagnosis.summary || diagnosis.notes || 'Patient diagnosed with ' + (diagnosis.diagnosis_description || 'condition') + '.'}</p>
+                      </div>
+                      <div className="diagnosis-footer">
+                        <p className="diagnosis-visits">📊 Visits / Reports: {occurrenceCount}</p>
+                        <p className="diagnosis-dates">
+                          📅 First diagnosed: {diagnosis.diagnosed_date || 'January 01, 1901'}<br/>
+                          📅 Last diagnosed: {diagnosis.diagnosed_date || 'January 01, 1901'}
+                        </p>
+                        <button 
+                          className="view-details-btn"
+                          onClick={() => viewDiagnosisDetails(diagnosis, diagnoses)}
+                        >
+                          📋 View Full Details
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="no-data-message">No diagnoses found</div>
+      )}
+
+      {/* Diagnosis Page Modal */}
+      {selectedDiagImage && diagImageUrl && (
+        <div className="zoom-modal" onClick={closeDiagModal}>
+          <div className="zoom-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="zoom-controls">
+              <button onClick={handleZoomIn}>🔍 +</button>
+              <button onClick={handleZoomOut}>🔍 -</button>
+              <button onClick={closeDiagModal}>✕ Close</button>
+            </div>
+            <div className="zoom-image-container">
+              <img 
+                src={diagImageUrl} 
+                alt={`Page ${selectedDiagImage.page_number}`}
+                style={{ transform: `scale(${zoomLevel})` }}
+              />
+            </div>
+            <div className="zoom-info">
+              <h3>📄 Page {selectedDiagImage.page_number}</h3>
+              <div className="extracted-info">
+                <h4>🩺 Extracted Diagnosis Information:</h4>
+                <div className="info-highlight">
+                  <p><strong>Diagnosis:</strong> "{selectedDiagImage.diagnosis.diagnosis_description}"</p>
+                  {selectedDiagImage.diagnosis.diagnosis_code && selectedDiagImage.diagnosis.diagnosis_code !== 'Unknown' && (
+                    <p><strong>Code:</strong> {selectedDiagImage.diagnosis.diagnosis_code}</p>
+                  )}
+                  {selectedDiagImage.diagnosis.diagnosing_doctor_first_name && selectedDiagImage.diagnosis.diagnosing_doctor_last_name && (
+                    <p><strong>Doctor:</strong> Dr. {selectedDiagImage.diagnosis.diagnosing_doctor_first_name} {selectedDiagImage.diagnosis.diagnosing_doctor_last_name}</p>
+                  )}
+                  {selectedDiagImage.diagnosis.diagnosing_facility_name && selectedDiagImage.diagnosis.diagnosing_facility_name !== 'Unknown' && (
+                    <p><strong>Facility:</strong> {selectedDiagImage.diagnosis.diagnosing_facility_name}</p>
+                  )}
+                </div>
+                <p className="help-text">👆 Find this diagnosis information on the page above</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Diagnosis Details Drill-Down Modal */}
+      {selectedDiagnosis && (
+        <div className="diagnosis-detail-modal" onClick={closeDiagnosisDetails}>
+          <div className="diagnosis-detail-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>{selectedDiagnosis.description}</h2>
+              <button onClick={closeDiagnosisDetails} className="close-btn">✕ Close</button>
+            </div>
+            
+            <div className="diagnosis-detail-body">
+              <div className="diagnosis-summary-section">
+                <h3>📝 Summary:</h3>
+                <p className="summary-text">{selectedDiagnosis.summary}</p>
+              </div>
+
+              <div className="diagnosis-metadata">
+                <div className="metadata-item">
+                  <strong>📅 First Diagnosed:</strong>
+                  <span>{selectedDiagnosis.first_diagnosed}</span>
+                </div>
+                <div className="metadata-item">
+                  <strong>📅 Last Diagnosed:</strong>
+                  <span>{selectedDiagnosis.last_diagnosed}</span>
+                </div>
+                <div className="metadata-item">
+                  <strong>📊 Occurrences:</strong>
+                  <span>{selectedDiagnosis.occurrences}</span>
+                </div>
+              </div>
+
+              <div className="diagnosis-history-section">
+                <h3>📋 Diagnosis History</h3>
+                {diagnosisHistory.map((entry, idx) => (
+                  <div key={idx} className="history-entry">
+                    <div className="history-header">
+                      <strong>📄 Page {entry.page_number}</strong>
+                      <span className="history-date">{entry.diagnosed_date || 'Unknown'}</span>
+                    </div>
+                    <div className="history-details">
+                      <p><strong>👨‍⚕️ Doctor:</strong> {entry.diagnosing_doctor_first_name && entry.diagnosing_doctor_last_name 
+                        ? `Dr. ${entry.diagnosing_doctor_first_name} ${entry.diagnosing_doctor_last_name}` 
+                        : 'Unknown'} 
+                        {entry.diagnosing_doctor_specialty && entry.diagnosing_doctor_specialty !== 'Unknown' 
+                          ? ` (${entry.diagnosing_doctor_specialty})` 
+                          : ''}
+                      </p>
+                      <p><strong>🏥 Facility:</strong> {entry.diagnosing_facility_name || 'Facility information not available'}</p>
+                      {entry.notes && (
+                        <>
+                          <p><strong>📝 Notes:</strong></p>
+                          <p className="history-notes">{entry.notes}</p>
+                        </>
+                      )}
+                      {entry.notes && (
+                        <>
+                          <p><strong>🤖 AI Notes:</strong></p>
+                          <p className="history-notes">{entry.notes}</p>
+                        </>
+                      )}
+                      <div className="history-actions">
+                        <button 
+                          className="view-page-btn-small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            closeDiagnosisDetails();
+                            viewDiagnosisPage(entry);
+                          }}
+                        >
+                          👁️ View Page
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Medicines Tab Component
+function MedicinesTab({ medications }) {
+  const [selectedMedImage, setSelectedMedImage] = useState(null);
+  const [medImageUrl, setMedImageUrl] = useState(null);
+  const [zoomLevel, setZoomLevel] = useState(1);
+
+  const totalMedications = medications.length;
+  const activeMedications = medications.filter(m => m.status?.toLowerCase() === 'active' || m.status?.toLowerCase() === 'current').length;
+  const discontinuedMedications = medications.filter(m => m.status?.toLowerCase() === 'discontinued').length;
+  const changedMedications = 0;
+
+  const viewMedicationPage = async (medication) => {
+    if (!medication.page_id) {
+      alert('No page information available for this medication');
+      return;
+    }
+
+    try {
+      // Fetch page details
+      const pageRes = await docClient.send(new ScanCommand({
+        TableName: 'HealthAI-Pages',
+        FilterExpression: 'page_id = :pageId',
+        ExpressionAttributeValues: { ':pageId': medication.page_id }
+      }));
+      
+      const page = pageRes.Items?.[0];
+      if (page && page.webp_s3_key) {
+        // Generate presigned URL
+        const command = new GetObjectCommand({
+          Bucket: S3_BUCKET,
+          Key: page.webp_s3_key
+        });
+        const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+        setMedImageUrl(url);
+        setSelectedMedImage({ ...page, medication });
+        setZoomLevel(1);
+      } else {
+        alert('Page image not available');
+      }
+    } catch (error) {
+      console.error('Error fetching medication page:', error);
+      alert('Error loading page image');
+    }
+  };
+
+  const closeMedModal = () => {
+    setSelectedMedImage(null);
+    setMedImageUrl(null);
+    setZoomLevel(1);
+  };
+
+  const handleZoomIn = () => {
+    setZoomLevel(prev => Math.min(prev + 0.5, 3));
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel(prev => Math.max(prev - 0.5, 0.5));
+  };
+
+  return (
+    <div className="medicines-content">
+      <h2>Patient Medications Dashboard</h2>
+      <div className="medications-info-message">No diagnoses available for filtering</div>
+      
+      <div className="medication-stats">
+        <div className="stat-box">
+          <div className="stat-label">Total Medications</div>
+          <div className="stat-value">{totalMedications}</div>
+        </div>
+        <div className="stat-box">
+          <div className="stat-label">Active Medications</div>
+          <div className="stat-value">{activeMedications}</div>
+        </div>
+        <div className="stat-box">
+          <div className="stat-label">Discontinued Medications</div>
+          <div className="stat-value">{discontinuedMedications}</div>
+        </div>
+        <div className="stat-box">
+          <div className="stat-label">Changed Medications</div>
+          <div className="stat-value">{changedMedications}</div>
+        </div>
+      </div>
+      
+      <h3>Full Medication List</h3>
+      {medications.length > 0 ? (
+        <div className="medications-table-container">
+          <table className="medical-table medications-table">
+            <thead>
+              <tr>
+                <th style={{ width: '40px' }}></th>
+                <th style={{ width: '180px' }}>Medication Name</th>
+                <th style={{ width: '180px' }}>Medication Class</th>
+                <th style={{ width: '100px' }}>Dosage</th>
+                <th style={{ width: '140px' }}>Frequency</th>
+                <th style={{ width: '120px' }}>Route</th>
+                <th style={{ width: '80px' }}>Start Date</th>
+                <th style={{ width: '80px' }}>End Date</th>
+                <th style={{ width: '100px' }}>Status</th>
+                <th style={{ minWidth: '300px' }}>Reason</th>
+                <th style={{ width: '150px' }}>Prescribing Doctor</th>
+                <th style={{ width: '180px' }}>Associated Diagnoses</th>
+              </tr>
+            </thead>
+            <tbody>
+              {medications.map((med, idx) => (
+                <tr key={idx}>
+                  <td>{idx}</td>
+                  <td><strong>{med.medication_name || med.name || 'N/A'}</strong></td>
+                  <td>{med.medication_class || med.class || 'N/A'}</td>
+                  <td>{med.dosage || 'N/A'}</td>
+                  <td>{med.frequency || 'N/A'}</td>
+                  <td>{med.route || 'oral'}</td>
+                  <td>{med.start_date && med.start_date !== 'Unknown' ? med.start_date : 'nan'}</td>
+                  <td>{med.end_date && med.end_date !== 'Unknown' ? med.end_date : 'nan'}</td>
+                  <td><span className={`status-badge ${med.status?.toLowerCase()}`}>{med.status || 'current'}</span></td>
+                  <td className="reason-cell">{med.reason || med.indication || med.notes || 'N/A'}</td>
+                  <td>{med.prescribing_doctor || 'N/A'}</td>
+                  <td>{med.associated_diagnosis || 'N/A'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="no-data-message">No medications found</div>
+      )}
+
+      {/* Medication Page Modal */}
+      {selectedMedImage && medImageUrl && (
+        <div className="zoom-modal" onClick={closeMedModal}>
+          <div className="zoom-controls">
+            <button onClick={(e) => { e.stopPropagation(); handleZoomOut(); }}>
+              🔍−
+            </button>
+            <span>{Math.round(zoomLevel * 100)}%</span>
+            <button onClick={(e) => { e.stopPropagation(); handleZoomIn(); }}>
+              🔍+
+            </button>
+            <button onClick={closeMedModal} className="close-btn">
+              ✕ Close
+            </button>
+          </div>
+          <div className="zoom-content" onClick={(e) => e.stopPropagation()}>
+            <div className="zoom-image-wrapper">
+              <img
+                src={medImageUrl}
+                alt={`Page ${selectedMedImage.page_number}`}
+                style={{ transform: `scale(${zoomLevel})` }}
+              />
+            </div>
+            <div className="zoom-info">
+              <h3>📄 Page {selectedMedImage.page_number}</h3>
+              <div className="extracted-info">
+                <h4>💊 Extracted Medication Information:</h4>
+                <div className="info-highlight">
+                  <p><strong>Medication:</strong> {selectedMedImage.medication.medication_name || selectedMedImage.medication.name}</p>
+                  {selectedMedImage.medication.dosage && (
+                    <p><strong>Dosage:</strong> {selectedMedImage.medication.dosage}</p>
+                  )}
+                  {selectedMedImage.medication.frequency && (
+                    <p><strong>Frequency:</strong> {selectedMedImage.medication.frequency}</p>
+                  )}
+                  {selectedMedImage.medication.route && (
+                    <p><strong>Route:</strong> {selectedMedImage.medication.route}</p>
+                  )}
+                  {selectedMedImage.medication.start_date && selectedMedImage.medication.start_date !== 'Unknown' && (
+                    <p><strong>Start Date:</strong> {selectedMedImage.medication.start_date}</p>
+                  )}
+                </div>
+                <p className="help-text">👆 Find this medication information on the page above</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Procedures Tab Component
+function ProceduresTab({ procedures }) {
+  return (
+    <div className="procedures-content">
+      <h2>Procedures & Surgery</h2>
+      {procedures && procedures.length > 0 ? (
+        <div className="procedures-table-container">
+          <table className="medical-table procedures-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Procedure Name</th>
+                <th>Procedure Code</th>
+                <th>Date</th>
+                <th>Performing Doctor</th>
+                <th>Facility</th>
+                <th>Indication</th>
+                <th>Outcome</th>
+                <th>Complications</th>
+              </tr>
+            </thead>
+            <tbody>
+              {procedures.map((proc, idx) => (
+                <tr key={idx}>
+                  <td>{idx + 1}</td>
+                  <td><strong>{proc.procedure_name || 'N/A'}</strong></td>
+                  <td>{proc.procedure_code || 'N/A'}</td>
+                  <td>{proc.procedure_date || 'N/A'}</td>
+                  <td>{proc.performing_doctor_first_name && proc.performing_doctor_last_name ? 
+                    `Dr. ${proc.performing_doctor_first_name} ${proc.performing_doctor_last_name}` : 'N/A'}</td>
+                  <td>{proc.facility || 'N/A'}</td>
+                  <td>{proc.indication || 'N/A'}</td>
+                  <td>{proc.outcome || 'N/A'}</td>
+                  <td>{proc.complications || 'None'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="no-data-message">No procedures or surgery data available</div>
+      )}
+    </div>
+  );
+}
+
+// Radiology Tab Component
+function RadiologyTab({ radiology }) {
+  return (
+    <div className="radiology-content">
+      <h2>Radiology Findings</h2>
+      <button className="download-reports-btn blue">📄 Download All Reports</button>
+      
+      {radiology && radiology.length > 0 ? (
+        <div className="radiology-studies">
+          {radiology.map((study, idx) => (
+            <div key={idx} className="study-card">
+              <h4>📄 {study.modality || study.study_type || 'Study'} - {study.body_part || 'Unknown'}</h4>
+              <div className="study-meta">
+                <span>📅 Exam Date: {study.exam_date || 'Unknown'}</span>
+                {study.radiologist_name && study.radiologist_name !== 'Unknown' && (
+                  <span> | 👨‍⚕️ Radiologist: Dr. {study.radiologist_name}</span>
+                )}
+                {study.is_abnormal === 'yes' && <span className="abnormal-badge">⚠️ Abnormal</span>}
+              </div>
+              {study.findings && study.findings !== 'Unknown' && (
+                <div className="study-findings">
+                  <strong>📋 Findings:</strong> {study.findings}
+                </div>
+              )}
+              {study.impression && study.impression !== 'Unknown' && (
+                <div className="study-impression">
+                  <strong>💡 Impression:</strong> {study.impression}
+                </div>
+              )}
+              {study.facility && study.facility !== 'Unknown' && (
+                <div className="study-facility">
+                  <strong>🏥 Facility:</strong> {study.facility}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="no-data-message">No radiology data available</div>
+      )}
+    </div>
+  );
+}
+
+// Family History Tab Component
+function FamilyHistoryTab({ familyHistory, socialHistory }) {
+  const [activeSubTab, setActiveSubTab] = React.useState('family');
+  
+  return (
+    <div className="family-history-content">
+      <div className="family-tabs">
+        <button 
+          className={activeSubTab === 'family' ? 'family-tab active' : 'family-tab'}
+          onClick={() => setActiveSubTab('family')}
+        >
+          Family History
+        </button>
+        <button 
+          className={activeSubTab === 'social' ? 'family-tab active' : 'family-tab'}
+          onClick={() => setActiveSubTab('social')}
+        >
+          Social History
+        </button>
+      </div>
+      
+      {activeSubTab === 'family' && (
+        <div>
+          <h2>Family History</h2>
+          {familyHistory && familyHistory.length > 0 ? (
+            <div className="family-history-table-container">
+              <table className="medical-table family-history-table">
+                <thead>
+                  <tr>
+                    <th>Relationship</th>
+                    <th>Condition</th>
+                    <th>Age at Diagnosis</th>
+                    <th>Status</th>
+                    <th>Age at Death</th>
+                    <th>Cause of Death</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {familyHistory.map((member, idx) => (
+                    <tr key={idx}>
+                      <td><strong>{member.relationship || 'Unknown'}</strong></td>
+                      <td>{member.condition || 'N/A'}</td>
+                      <td>{member.age_at_diagnosis || 'N/A'}</td>
+                      <td>
+                        {member.is_deceased === 'yes' ? (
+                          <span className="deceased-badge">⚰️ Deceased</span>
+                        ) : member.is_deceased === 'no' ? (
+                          <span className="living-badge">✓ Living</span>
+                        ) : 'Unknown'}
+                      </td>
+                      <td>{member.age_at_death || 'N/A'}</td>
+                      <td>{member.cause_of_death || 'N/A'}</td>
+                      <td>{member.notes || 'N/A'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="no-data-message">No family history data available</div>
+          )}
+        </div>
+      )}
+      
+      {activeSubTab === 'social' && (
+        <div>
+          <h2>Social History</h2>
+          {socialHistory ? (
+            <div className="social-history-grid">
+              <div className="social-item">
+                <strong>🚬 Smoking Status:</strong> {socialHistory.smoking_status || 'Unknown'}
+              </div>
+              <div className="social-item">
+                <strong>🍺 Alcohol Use:</strong> {socialHistory.alcohol_use || 'Unknown'}
+              </div>
+              <div className="social-item">
+                <strong>💊 Drug Use:</strong> {socialHistory.drug_use || 'Unknown'}
+              </div>
+              <div className="social-item">
+                <strong>💼 Occupation:</strong> {socialHistory.occupation || 'Unknown'}
+              </div>
+              <div className="social-item">
+                <strong>💑 Marital Status:</strong> {socialHistory.marital_status || 'Unknown'}
+              </div>
+              <div className="social-item">
+                <strong>🏠 Living Situation:</strong> {socialHistory.living_situation || 'Unknown'}
+              </div>
+              <div className="social-item">
+                <strong>🏃 Exercise:</strong> {socialHistory.exercise_frequency || 'Unknown'}
+              </div>
+              <div className="social-item">
+                <strong>🥗 Diet:</strong> {socialHistory.diet_type || 'Unknown'}
+              </div>
+              {socialHistory.notes && socialHistory.notes !== 'Unknown' && socialHistory.notes !== '' && (
+                <div className="social-item full-width">
+                  <strong>📝 Additional Notes:</strong> {socialHistory.notes}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="no-data-message">No social history data available</div>
+          )}
+        </div>
+      )}
+      
+      <h2 style={{ display: 'none' }}>Family History</h2>
+      <button className="download-reports-btn blue">📄 Download Report</button>
+      
+      <h3>Family Medical Conditions</h3>
+      
+      <div className="condition-card">
+        <div className="condition-header">
+          <span>unknown - 1 conditions</span>
+          <button className="expand-btn">▲</button>
+        </div>
+      </div>
+      
+      <div className="condition-details-expanded">
+        <h4>prostate cancer</h4>
+        <div className="condition-info">
+          <div className="info-item"><strong>Age at Diagnosis:</strong> unknown</div>
+          <div className="info-item"><strong>Status:</strong> unknown</div>
+          <div className="info-item"><strong>Notes:</strong> Family history of prostate cancer noted in active problem list</div>
+        </div>
+        <button className="view-document-btn">View Source Document</button>
+      </div>
+    </div>
+  );
+}
+
+// Documents Tab Component (Page Images)
+function DocumentsTab({ patientId }) {
+  const [pages, setPages] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [imageUrls, setImageUrls] = useState({});
+  const [zoomedImage, setZoomedImage] = useState(null);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [documentId, setDocumentId] = useState(null);
+  
+  // Filter states
+  const [selectedDocTypes, setSelectedDocTypes] = useState([]);
+  const [selectedPatientTypes, setSelectedPatientTypes] = useState(['inpatient', 'outpatient']);
+
+  useEffect(() => {
+    fetchDocumentId();
+  }, [patientId]);
+
+  useEffect(() => {
+    if (documentId) {
+      fetchPages();
+    }
+  }, [documentId]);
+
+  // Filter toggle functions
+  const toggleDocType = (type) => {
+    setSelectedDocTypes(prev => 
+      prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+    );
+  };
+
+  const togglePatientType = (type) => {
+    setSelectedPatientTypes(prev =>
+      prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+    );
+  };
+
+  // Document type to category mapping - comprehensive SLF medical specialties
+  const docTypeMapping = {
+    'Provider Notes': [
+      'internal-medicine', 'family-medicine', 'cardiology', 'neurology', 'urology', 
+      'psychiatry', 'endocrinology', 'gastroenterology', 'pulmonary', 'nephrology',
+      'dermatology', 'rheumatology', 'oncology', 'hematology', 'infectious-disease',
+      'allergy-immunology', 'geriatrics', 'pediatrics', 'obstetrics-gynecology',
+      'ophthalmology', 'optometry', 'otolaryngology', 'physical-medicine-rehabilitation',
+      'hospice-palliative-care', 'integrative-medicine', 'functional-medicine',
+      'complementary-integrative-medicine', 'east-asian-medicine', 'naturopathic-medicine',
+      'wellness-coach', 'nutrition', 'medical-genetics', 'neuropsychology',
+      'psychology-social-work', 'anesthesia-pain-management', 'regenerative-medicine',
+      'sleep-medicine'
+    ],
+    'Radiology': ['radiology'],
+    'Pathology': ['pathology'],
+    'Procedures and Surgery': [
+      'procedures', 'surgery', 'cardiothoracic-surgery', 'colorectal-surgery',
+      'neurosurgery', 'orthopedic-surgery', 'oral-maxillofacial-surgery',
+      'plastic-reconstructive-surgery', 'surgical-oncology', 'vascular-surgery'
+    ],
+    'Lab Tests': ['lab-results', 'genetic-testing'],
+    'Diagnostic Testing': ['ekg-echo-stress', 'audiology'],
+    'Therapies': [
+      'physical-therapy', 'occupational-therapy', 'speech-language-pathology',
+      'massage-therapy', 'acupuncture', 'chiropractic-medicine'
+    ],
+    'Emergency & Hospital': ['emergency-medicine', 'hospitalization', 'urgent-care'],
+    'Radiation & Oncology': ['radiation-oncology', 'oncology', 'surgical-oncology'],
+    'Dental': ['dental', 'oral-maxillofacial-surgery'],
+    'Podiatry': ['podiatry'],
+    'Admin': ['administrative', 'vaccination', 'executive-physical', 'fitness-analysis']
+  };
+
+  // Apply all filters
+  let filteredPages = pages;
+
+  // Filter by category (existing filter)
+  if (selectedCategory !== 'all') {
+    filteredPages = filteredPages.filter(page =>
+      page.categories?.some(cat => cat.category_name === selectedCategory)
+    );
+  }
+
+  // Filter by document types
+  if (selectedDocTypes.length > 0) {
+    filteredPages = filteredPages.filter(page => {
+      const pageCategories = page.categories?.map(c => c.category_name) || [];
+      return selectedDocTypes.some(docType => {
+        const mappedCategories = docTypeMapping[docType] || [];
+        return mappedCategories.some(cat => pageCategories.includes(cat));
+      });
+    });
+  }
+
+  // Filter by patient types
+  if (selectedPatientTypes.length > 0) {
+    filteredPages = filteredPages.filter(page => {
+      // Check if page has patient_type attribute, otherwise default to 'outpatient'
+      const patientType = page.patient_type || 'outpatient';
+      return selectedPatientTypes.map(t => t.toLowerCase()).includes(patientType.toLowerCase());
+    });
+  }
+
+  useEffect(() => {
+    // Generate presigned URLs for all images
+    const generateUrls = async () => {
+      const urls = {};
+      for (const page of filteredPages) {
+        if (page.webp_s3_key) {
+          try {
+            const command = new GetObjectCommand({
+              Bucket: S3_BUCKET,
+              Key: page.webp_s3_key
+            });
+            const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+            urls[page.page_id] = url;
+          } catch (error) {
+            console.error(`Error generating URL for page ${page.page_number}:`, error);
+          }
+        }
+      }
+      setImageUrls(urls);
+    };
+
+    if (filteredPages.length > 0) {
+      generateUrls();
+    }
+  }, [selectedCategory, selectedDocTypes, selectedPatientTypes, pages]);
+
+  const fetchDocumentId = async () => {
+    try {
+      const patientRes = await docClient.send(new ScanCommand({
+        TableName: 'HealthAI-Patients',
+        FilterExpression: 'patient_id = :pid OR document_id = :pid',
+        ExpressionAttributeValues: { ':pid': patientId }
+      }));
+      const patientData = patientRes.Items?.[0];
+      const docId = patientData?.document_id || patientId;
+      setDocumentId(docId);
+      console.log('DocumentsTab using document_id:', docId);
+    } catch (error) {
+      console.error('Error fetching document_id:', error);
+      setDocumentId(patientId);
+    }
+  };
+
+  const fetchPages = async () => {
+    try {
+      const [pagesRes, categoriesRes] = await Promise.all([
+        docClient.send(new ScanCommand({
+          TableName: 'HealthAI-Pages',
+          FilterExpression: 'document_id = :docId',
+          ExpressionAttributeValues: { ':docId': documentId }
+        })),
+        docClient.send(new ScanCommand({
+          TableName: 'HealthAI-Categories',
+          FilterExpression: 'document_id = :docId',
+          ExpressionAttributeValues: { ':docId': documentId }
+        }))
+      ]);
+
+      const pagesData = pagesRes.Items || [];
+      const categoriesData = categoriesRes.Items || [];
+
+      // Organize categories by page
+      const pageCategories = {};
+      categoriesData.forEach(cat => {
+        if (!pageCategories[cat.page_id]) {
+          pageCategories[cat.page_id] = [];
+        }
+        pageCategories[cat.page_id].push(cat);
+      });
+
+      // Attach categories to pages
+      const pagesWithCategories = pagesData.map(page => ({
+        ...page,
+        categories: pageCategories[page.page_id] || []
+      }));
+
+      // Sort by page number
+      pagesWithCategories.sort((a, b) => (a.page_number || 0) - (b.page_number || 0));
+
+      setPages(pagesWithCategories);
+
+      // Get unique categories
+      const uniqueCategories = [...new Set(categoriesData.map(cat => cat.category_name))];
+      setCategories(uniqueCategories);
+    } catch (error) {
+      console.error('Error fetching pages:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openZoom = (page) => {
+    setZoomedImage(page);
+    setZoomLevel(1);
+  };
+
+  const closeZoom = () => {
+    setZoomedImage(null);
+    setZoomLevel(1);
+  };
+
+  const handleZoomIn = () => {
+    setZoomLevel(prev => Math.min(prev + 0.5, 3));
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel(prev => Math.max(prev - 0.5, 0.5));
+  };
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && zoomedImage) {
+        closeZoom();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [zoomedImage]);
+
+  if (loading) return <div className="loading">Loading document pages...</div>;
+
+  return (
+    <div className="documents-content">
+      <h2>🖼️ Document Pages</h2>
+      <p className="subtitle">{pages.length} page(s)</p>
+
+      {/* Document Type and Patient Type Filters */}
+      <div className="filter-documents">
+        <h3>Filter Documents</h3>
+        
+        <div className="document-types">
+          <h4>Document Types:</h4>
+          <div className="filter-checkboxes">
+            {[
+              'Provider Notes', 
+              'Radiology', 
+              'Pathology', 
+              'Procedures and Surgery', 
+              'Lab Tests', 
+              'Diagnostic Testing',
+              'Therapies',
+              'Emergency & Hospital',
+              'Radiation & Oncology',
+              'Dental',
+              'Podiatry',
+              'Admin'
+            ].map(type => (
+              <label key={type} className="filter-checkbox">
+                <input
+                  type="checkbox"
+                  checked={selectedDocTypes.includes(type)}
+                  onChange={() => toggleDocType(type)}
+                />
+                <span>{type}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="patient-type">
+          <h4>Patient Type:</h4>
+          <div className="filter-checkboxes">
+            {['Inpatient', 'Outpatient'].map(type => (
+              <label key={type} className="filter-checkbox">
+                <input
+                  type="checkbox"
+                  checked={selectedPatientTypes.includes(type.toLowerCase())}
+                  onChange={() => togglePatientType(type.toLowerCase())}
+                />
+                <span>{type}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="category-filter">
+        <h3>Filter by Category:</h3>
+        <div className="category-buttons">
+          <button
+            className={selectedCategory === 'all' ? 'active' : ''}
+            onClick={() => setSelectedCategory('all')}
+          >
+            All Pages ({pages.length})
+          </button>
+          {categories.map(cat => {
+            const count = pages.filter(p => 
+              p.categories?.some(c => c.category_name === cat)
+            ).length;
+            return (
+              <button
+                key={cat}
+                className={selectedCategory === cat ? 'active' : ''}
+                onClick={() => setSelectedCategory(cat)}
+              >
+                {cat} ({count})
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {filteredPages.length === 0 ? (
+        <div className="no-data-message">No pages found for this category</div>
+      ) : (
+        <div className="image-gallery">
+          {filteredPages.map(page => (
+            <div key={page.page_id} className="image-card">
+              <div className="image-header">
+                <h4>Page {page.page_number}</h4>
+                {page.categories && page.categories.length > 0 && (
+                  <div className="category-tags">
+                    {page.categories.map((cat, idx) => (
+                      <span key={idx} className="category-tag" title={cat.reason}>
+                        {cat.category_name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              <div className="image-container">
+                {imageUrls[page.page_id] ? (
+                  <img
+                    src={imageUrls[page.page_id]}
+                    alt={`Page ${page.page_number}`}
+                    loading="lazy"
+                    onClick={() => openZoom(page)}
+                    style={{ cursor: 'zoom-in' }}
+                  />
+                ) : (
+                  <div className="image-placeholder">Loading image...</div>
+                )}
+              </div>
+              
+              <div className="image-footer">
+                <span className={`status ${page.ai_processed ? 'processed' : 'pending'}`}>
+                  {page.ai_processed ? '✓ Processed' : '⏳ Processing...'}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Zoom Modal */}
+      {zoomedImage && (
+        <div className="zoom-modal" onClick={closeZoom}>
+          <div className="zoom-controls">
+            <button onClick={(e) => { e.stopPropagation(); handleZoomOut(); }}>
+              🔍−
+            </button>
+            <span>{Math.round(zoomLevel * 100)}%</span>
+            <button onClick={(e) => { e.stopPropagation(); handleZoomIn(); }}>
+              🔍+
+            </button>
+            <button onClick={closeZoom} className="close-btn">
+              ✕ Close
+            </button>
+          </div>
+          <div className="zoom-content" onClick={(e) => e.stopPropagation()}>
+            <div className="zoom-image-wrapper">
+              <img
+                src={imageUrls[zoomedImage.page_id]}
+                alt={`Page ${zoomedImage.page_number}`}
+                style={{ transform: `scale(${zoomLevel})` }}
+              />
+            </div>
+            <div className="zoom-info">
+              <h3>Page {zoomedImage.page_number}</h3>
+              {zoomedImage.categories && zoomedImage.categories.length > 0 && (
+                <div className="category-tags">
+                  {zoomedImage.categories.map((cat, idx) => (
+                    <span key={idx} className="category-tag">
+                      {cat.category_name}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Medical Summary Tab Component (Next Steps)
+function MedicalSummaryTab({ medications, diagnoses, testResults, patientId }) {
+  const [recommendations, setRecommendations] = useState([]);
+
+  useEffect(() => {
+    // Generate AI-powered recommendations
+    const aiRecommendations = generateRecommendations(medications, diagnoses, testResults);
+    setRecommendations(aiRecommendations);
+  }, [medications, diagnoses, testResults]);
+
+  const generateRecommendations = (meds, diags, tests) => {
+    const recs = [];
+    
+    // Analyze medications
+    const currentMeds = meds.filter(m => m.status?.toLowerCase() === 'active' || m.status?.toLowerCase() === 'current' || m.is_current === 'Yes');
+    
+    if (currentMeds.length > 5) {
+      recs.push({
+        category: 'Medication Management',
+        priority: 'high',
+        icon: '💊',
+        title: 'Medication Review Recommended',
+        description: `Patient is currently on ${currentMeds.length} medications. Consider scheduling a comprehensive medication review to assess for potential drug interactions and optimize therapy.`,
+        actions: [
+          'Schedule pharmacist consultation',
+          'Review for duplicate therapies',
+          'Check for drug-drug interactions',
+          'Assess medication adherence'
+        ]
+      });
+    }
+
+    // Check for specific medication classes
+    const hasAnticoagulant = currentMeds.some(m => 
+      m.medication_name?.toLowerCase().includes('warfarin') ||
+      m.medication_name?.toLowerCase().includes('apixaban') ||
+      m.medication_name?.toLowerCase().includes('rivaroxaban') ||
+      m.name?.toLowerCase().includes('warfarin')
+    );
+    
+    if (hasAnticoagulant) {
+      recs.push({
+        category: 'Lab Monitoring',
+        priority: 'high',
+        icon: '🔬',
+        title: 'Anticoagulation Monitoring Required',
+        description: 'Patient is on anticoagulation therapy. Regular monitoring is essential for patient safety.',
+        actions: [
+          'Schedule INR/PT testing (if on warfarin)',
+          'Monitor for bleeding complications',
+          'Review medication interactions',
+          'Patient education on dietary restrictions'
+        ]
+      });
+    }
+
+    // Analyze diagnoses
+    const hasChronicCondition = diags.some(d => {
+      const desc = (d.condition || d.diagnosis_description || d.description || '').toLowerCase();
+      return desc.includes('diabetes') || desc.includes('hypertension') || 
+             desc.includes('heart failure') || desc.includes('copd') ||
+             desc.includes('asthma') || desc.includes('chronic');
+    });
+
+    if (hasChronicCondition) {
+      recs.push({
+        category: 'Chronic Disease Management',
+        priority: 'medium',
+        icon: '🩺',
+        title: 'Chronic Condition Follow-up',
+        description: 'Patient has chronic conditions requiring ongoing management and monitoring.',
+        actions: [
+          'Schedule regular follow-up appointments',
+          'Review disease-specific care plans',
+          'Assess need for specialist referrals',
+          'Patient education on condition management'
+        ]
+      });
+    }
+
+    // Check for diabetes-related needs
+    const hasDiabetes = diags.some(d => {
+      const desc = (d.condition || d.diagnosis_description || d.description || '').toLowerCase();
+      return desc.includes('diabetes');
+    });
+    
+    if (hasDiabetes) {
+      recs.push({
+        category: 'Diabetes Care',
+        priority: 'high',
+        icon: '🩸',
+        title: 'Diabetes Monitoring & Management',
+        description: 'Comprehensive diabetes care plan recommended.',
+        actions: [
+          'Schedule HbA1c testing (every 3 months)',
+          'Annual comprehensive foot exam',
+          'Annual dilated eye exam',
+          'Kidney function monitoring (eGFR, urine albumin)',
+          'Review blood glucose monitoring logs',
+          'Assess for diabetic complications'
+        ]
+      });
+    }
+
+    // Analyze abnormal test results
+    const abnormalTests = tests.filter(t => t.is_abnormal === 'Yes' || t.abnormal);
+    
+    if (abnormalTests.length > 0) {
+      const criticalTests = abnormalTests.filter(t => {
+        const name = (t.test_name || '').toLowerCase();
+        return name.includes('creatinine') || name.includes('potassium') || 
+               name.includes('glucose') || name.includes('hemoglobin');
+      });
+
+      if (criticalTests.length > 0) {
+        recs.push({
+          category: 'Lab Follow-up',
+          priority: 'high',
+          icon: '⚠️',
+          title: 'Abnormal Lab Results Require Attention',
+          description: `${abnormalTests.length} abnormal test results found. ${criticalTests.length} may require immediate attention.`,
+          actions: [
+            'Review all abnormal results with physician',
+            'Repeat testing as clinically indicated',
+            'Consider specialist referral if needed',
+            'Adjust medications based on results'
+          ],
+          details: criticalTests.map(t => 
+            `${t.test_name}: ${t.result_value || t.result} (${t.reference_range || 'See reference range'})`
+          )
+        });
+      } else {
+        recs.push({
+          category: 'Lab Follow-up',
+          priority: 'medium',
+          icon: '🔬',
+          title: 'Lab Results Review Needed',
+          description: `${abnormalTests.length} abnormal test results require follow-up.`,
+          actions: [
+            'Discuss results with patient',
+            'Determine if repeat testing needed',
+            'Document clinical decision-making'
+          ]
+        });
+      }
+    }
+
+    // Check for cardiovascular risk
+    const hasCardiacCondition = diags.some(d => {
+      const desc = (d.condition || d.diagnosis_description || d.description || '').toLowerCase();
+      return desc.includes('hypertension') || desc.includes('heart') || 
+             desc.includes('cardiac') || desc.includes('coronary');
+    });
+
+    if (hasCardiacCondition) {
+      recs.push({
+        category: 'Cardiovascular Health',
+        priority: 'medium',
+        icon: '❤️',
+        title: 'Cardiovascular Risk Management',
+        description: 'Patient has cardiovascular conditions requiring proactive management.',
+        actions: [
+          'Assess cardiovascular risk factors',
+          'Monitor blood pressure regularly',
+          'Review lipid panel results',
+          'Encourage lifestyle modifications',
+          'Consider cardiology referral if not already established'
+        ]
+      });
+    }
+
+    // General preventive care recommendations
+    recs.push({
+      category: 'Preventive Care',
+      priority: 'low',
+      icon: '🛡️',
+      title: 'Routine Preventive Health Maintenance',
+      description: 'Ensure patient is up-to-date with age-appropriate preventive care.',
+      actions: [
+        'Review immunization status',
+        'Age-appropriate cancer screenings',
+        'Annual wellness visit',
+        'Lifestyle counseling (diet, exercise, smoking cessation)'
+      ]
+    });
+
+    // Check for polypharmacy
+    if (currentMeds.length >= 5) {
+      recs.push({
+        category: 'Medication Safety',
+        priority: 'medium',
+        icon: '⚕️',
+        title: 'Polypharmacy Assessment',
+        description: 'Multiple medications increase risk of adverse effects and interactions.',
+        actions: [
+          'Deprescribing review - assess each medication necessity',
+          'Check for potentially inappropriate medications',
+          'Simplify medication regimen if possible',
+          'Ensure patient understanding of each medication'
+        ]
+      });
+    }
+
+    // Sort by priority
+    const priorityOrder = { 'high': 0, 'medium': 1, 'low': 2 };
+    return recs.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+  };
+
+  const currentMeds = medications.filter(m => m.status?.toLowerCase() === 'active' || m.status?.toLowerCase() === 'current' || m.is_current === 'Yes');
+  const abnormalTests = testResults.filter(t => t.is_abnormal === 'Yes' || t.abnormal);
+
+  return (
+    <div className="medical-summary-content">
+      <h2>🎯 Next Steps - AI-Powered Recommendations</h2>
+      <p className="subtitle">
+        Based on analysis of {medications.length} medications, {diagnoses.length} diagnoses, 
+        and {testResults.length} test results
+      </p>
+
+      <div className="summary-cards">
+        <div className="summary-card">
+          <div className="summary-icon">💊</div>
+          <div className="summary-content">
+            <h3>{currentMeds.length}</h3>
+            <p>Current Medications</p>
+          </div>
+        </div>
+        <div className="summary-card">
+          <div className="summary-icon">🩺</div>
+          <div className="summary-content">
+            <h3>{diagnoses.length}</h3>
+            <p>Active Diagnoses</p>
+          </div>
+        </div>
+        <div className="summary-card">
+          <div className="summary-icon">⚠️</div>
+          <div className="summary-content">
+            <h3>{abnormalTests.length}</h3>
+            <p>Abnormal Results</p>
+          </div>
+        </div>
+        <div className="summary-card">
+          <div className="summary-icon">🎯</div>
+          <div className="summary-content">
+            <h3>{recommendations.length}</h3>
+            <p>Recommendations</p>
+          </div>
+        </div>
+      </div>
+
+      {recommendations.length === 0 ? (
+        <div className="no-data-message">
+          <p>✅ No specific recommendations at this time.</p>
+          <p>Continue with routine care and monitoring.</p>
+        </div>
+      ) : (
+        <div className="recommendations-container">
+          {recommendations.map((rec, idx) => (
+            <div key={idx} className={`recommendation-card priority-${rec.priority}`}>
+              <div className="rec-header">
+                <div className="rec-icon">{rec.icon}</div>
+                <div className="rec-title-section">
+                  <h3>{rec.title}</h3>
+                  <span className={`priority-badge priority-${rec.priority}`}>
+                    {rec.priority.toUpperCase()} PRIORITY
+                  </span>
+                </div>
+              </div>
+              
+              <div className="rec-category">{rec.category}</div>
+              <p className="rec-description">{rec.description}</p>
+              
+              <div className="rec-actions">
+                <h4>Recommended Actions:</h4>
+                <ul>
+                  {rec.actions.map((action, i) => (
+                    <li key={i}>{action}</li>
+                  ))}
+                </ul>
+              </div>
+
+              {rec.details && rec.details.length > 0 && (
+                <div className="rec-details">
+                  <h4>Details:</h4>
+                  <ul>
+                    {rec.details.map((detail, i) => (
+                      <li key={i}>{detail}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="disclaimer">
+        <h4>⚕️ Clinical Disclaimer</h4>
+        <p>
+          These recommendations are generated by AI analysis and are intended to support clinical 
+          decision-making, not replace it. All recommendations should be reviewed by a qualified 
+          healthcare professional and tailored to the individual patient's needs, circumstances, 
+          and current clinical guidelines.
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -801,57 +2723,104 @@ function DiagnosesPage() {
     diag.diagnosis_code?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Group diagnoses by specialty
-  const groupBySpecialty = (diagList) => {
-    const grouped = {};
-    const uncategorized = [];
+  // Group diagnoses by similar conditions
+  const groupDiagnoses = (diagList) => {
+    const groups = {};
     
     diagList.forEach(diag => {
-      const specialty = diag.diagnosing_doctor_specialty;
-      if (specialty && specialty !== '' && specialty !== 'N/A' && specialty !== 'Unknown') {
-        if (!grouped[specialty]) {
-          grouped[specialty] = [];
-        }
-        grouped[specialty].push(diag);
-      } else {
-        uncategorized.push(diag);
+      const desc = diag.diagnosis_description || 'Unknown';
+      
+      // Define grouping keywords - group by primary condition
+      let groupKey = 'Other Conditions';
+      
+      // Prostate Cancer related
+      if (desc.toLowerCase().includes('prostate') && 
+          (desc.toLowerCase().includes('cancer') || desc.toLowerCase().includes('adenocarcinoma') || 
+           desc.toLowerCase().includes('carcinoma') || desc.toLowerCase().includes('malign') ||
+           desc.toLowerCase().includes('gleason') || desc.toLowerCase().includes('metastatic'))) {
+        groupKey = 'Prostate Cancer & Related Conditions';
       }
+      // Diabetes
+      else if (desc.toLowerCase().includes('diabetes') || desc.toLowerCase().includes('diabetic')) {
+        groupKey = 'Diabetes Mellitus & Related Conditions';
+      }
+      // Cardiovascular
+      else if (desc.toLowerCase().includes('heart') || desc.toLowerCase().includes('cardiac') || 
+               desc.toLowerCase().includes('coronary') || desc.toLowerCase().includes('atherosclerotic')) {
+        groupKey = 'Cardiovascular Conditions';
+      }
+      // Erectile dysfunction
+      else if (desc.toLowerCase().includes('erectile')) {
+        groupKey = 'Erectile Dysfunction';
+      }
+      // Hypertension
+      else if (desc.toLowerCase().includes('hypertension') || desc.toLowerCase().includes('blood pressure')) {
+        groupKey = 'Hypertension';
+      }
+      // Hyperlipidemia/Cholesterol
+      else if (desc.toLowerCase().includes('lipid') || desc.toLowerCase().includes('cholesterol') || 
+               desc.toLowerCase().includes('triglyceride')) {
+        groupKey = 'Lipid Disorders';
+      }
+      // Benign prostate conditions
+      else if (desc.toLowerCase().includes('prostate') && desc.toLowerCase().includes('benign')) {
+        groupKey = 'Benign Prostate Conditions';
+      }
+      // Bladder/Urinary
+      else if (desc.toLowerCase().includes('bladder') || desc.toLowerCase().includes('urinary') || 
+               desc.toLowerCase().includes('nocturia') || desc.toLowerCase().includes('dysuria')) {
+        groupKey = 'Bladder & Urinary Conditions';
+      }
+      // Musculoskeletal
+      else if (desc.toLowerCase().includes('joint') || desc.toLowerCase().includes('spine') || 
+               desc.toLowerCase().includes('degenerative') || desc.toLowerCase().includes('knee') ||
+               desc.toLowerCase().includes('hip')) {
+        groupKey = 'Musculoskeletal Conditions';
+      }
+      // Mental Health
+      else if (desc.toLowerCase().includes('anxiety') || desc.toLowerCase().includes('depression') || 
+               desc.toLowerCase().includes('sleep')) {
+        groupKey = 'Mental Health & Sleep Disorders';
+      }
+      // Gastrointestinal
+      else if (desc.toLowerCase().includes('gallbladder') || desc.toLowerCase().includes('cholelithiasis') || 
+               desc.toLowerCase().includes('diverticulosis')) {
+        groupKey = 'Gastrointestinal Conditions';
+      }
+      // Obesity
+      else if (desc.toLowerCase().includes('obesity') || desc.toLowerCase().includes('obese')) {
+        groupKey = 'Obesity';
+      }
+      
+      if (!groups[groupKey]) {
+        groups[groupKey] = [];
+      }
+      groups[groupKey].push(diag);
     });
     
-    // Sort specialties alphabetically
-    const sortedGroups = Object.keys(grouped).sort().reduce((acc, key) => {
-      acc[key] = grouped[key];
-      return acc;
-    }, {});
-    
-    // Add uncategorized at the end if any exist
-    if (uncategorized.length > 0) {
-      sortedGroups['Other / Unspecified'] = uncategorized;
-    }
-    
-    return sortedGroups;
+    return groups;
   };
 
-  const groupedDiagnoses = groupBySpecialty(filteredDiagnoses);
+  const groupedDiagnoses = groupDiagnoses(filteredDiagnoses);
   
-  // Get all available specialties for the filter dropdown
-  const allSpecialties = Object.keys(groupedDiagnoses);
+  // Get all available groups for the filter dropdown
+  const allGroups = Object.keys(groupedDiagnoses);
   
-  // Filter grouped diagnoses based on selected specialties
+  // Filter grouped diagnoses based on selected groups
   const displayedDiagnoses = selectedSpecialties.length === 0 
     ? groupedDiagnoses 
     : Object.keys(groupedDiagnoses)
-        .filter(specialty => selectedSpecialties.includes(specialty))
-        .reduce((acc, specialty) => {
-          acc[specialty] = groupedDiagnoses[specialty];
+        .filter(group => selectedSpecialties.includes(group))
+        .reduce((acc, group) => {
+          acc[group] = groupedDiagnoses[group];
           return acc;
         }, {});
 
-  const toggleSpecialty = (specialty) => {
+  const toggleSpecialty = (group) => {
     setSelectedSpecialties(prev => 
-      prev.includes(specialty)
-        ? prev.filter(s => s !== specialty)
-        : [...prev, specialty]
+      prev.includes(group)
+        ? prev.filter(s => s !== group)
+        : [...prev, group]
     );
   };
 
@@ -860,7 +2829,7 @@ function DiagnosesPage() {
   };
 
   const selectAllSpecialties = () => {
-    setSelectedSpecialties(allSpecialties);
+    setSelectedSpecialties(allGroups);
   };
 
   if (loading) return <div className="loading">Loading diagnoses...</div>;
@@ -870,9 +2839,9 @@ function DiagnosesPage() {
       <Link to={`/document/${documentId}`} className="back-link">← Back to Dashboard</Link>
       
       <div className="page-header">
-        <h2>🩺 Diagnoses by Medical Specialty</h2>
+        <h2>🩺 Diagnoses by Condition Category</h2>
         <p className="subtitle">
-          {diagnoses.length} diagnosis/diagnoses found across {Object.keys(groupedDiagnoses).length} specialties
+          {diagnoses.length} diagnosis entries grouped into {Object.keys(groupedDiagnoses).length} categories
           {selectedSpecialties.length > 0 && ` (showing ${selectedSpecialties.length} selected)`}
         </p>
       </div>
@@ -889,12 +2858,12 @@ function DiagnosesPage() {
 
         <div className="specialty-filter">
           <label className="filter-label">
-            <span>🏥 Filter by Specialty:</span>
+            <span>📋 Filter by Category:</span>
             <div className="filter-actions">
               <button 
                 onClick={selectAllSpecialties} 
                 className="filter-action-btn"
-                disabled={selectedSpecialties.length === allSpecialties.length}
+                disabled={selectedSpecialties.length === allGroups.length}
               >
                 Select All
               </button>
@@ -908,15 +2877,15 @@ function DiagnosesPage() {
             </div>
           </label>
           <div className="specialty-checkboxes">
-            {allSpecialties.map(specialty => (
-              <label key={specialty} className="specialty-checkbox">
+            {allGroups.map(group => (
+              <label key={group} className="specialty-checkbox">
                 <input
                   type="checkbox"
-                  checked={selectedSpecialties.includes(specialty)}
-                  onChange={() => toggleSpecialty(specialty)}
+                  checked={selectedSpecialties.includes(group)}
+                  onChange={() => toggleSpecialty(group)}
                 />
                 <span className="checkbox-label-text">
-                  {specialty} ({groupedDiagnoses[specialty].length})
+                  {group} ({groupedDiagnoses[group].length})
                 </span>
               </label>
             ))}
@@ -927,14 +2896,14 @@ function DiagnosesPage() {
       {filteredDiagnoses.length === 0 ? (
         <div className="info-message">No diagnoses found</div>
       ) : Object.keys(displayedDiagnoses).length === 0 ? (
-        <div className="info-message">No specialties selected. Please select one or more specialties above.</div>
+        <div className="info-message">No categories selected. Please select one or more categories above.</div>
       ) : (
         <div className="diagnoses-by-specialty">
-          {Object.entries(displayedDiagnoses).map(([specialty, diagList]) => (
-            <div key={specialty} className="specialty-section">
+          {Object.entries(displayedDiagnoses).map(([categoryName, diagList]) => (
+            <div key={categoryName} className="specialty-section">
               <div className="specialty-header">
-                <h3>{specialty}</h3>
-                <span className="specialty-count">{diagList.length} diagnosis{diagList.length !== 1 ? 'es' : ''}</span>
+                <h3>{categoryName}</h3>
+                <span className="specialty-count">{diagList.length} entry{diagList.length !== 1 ? 'entries' : ''}</span>
               </div>
               <div className="diagnosis-grid">
                 {diagList.map((diag, idx) => {
