@@ -507,7 +507,13 @@ function ProcessingStatusHome() {
               <tbody>
                 {allDocuments.map((doc, idx) => (
                   <tr key={idx} className={doc.status === 'Processing' ? 'processing-row' : ''}>
-                    <td className="patient-name">{doc.patient_name}</td>
+                    <td className="patient-id">
+                      {doc.patient_id !== 'Unknown' && doc.patient_id !== 'PENDING' ? (
+                        <code>{doc.patient_id.substring(0, 8)}...</code>
+                      ) : (
+                        doc.patient_id
+                      )}
+                    </td>
                     <td className="document-id">
                       <code>{doc.document_id.substring(0, 8)}...</code>
                     </td>
