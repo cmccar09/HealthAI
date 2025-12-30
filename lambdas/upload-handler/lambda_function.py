@@ -75,19 +75,69 @@ def lambda_handler(event, context):
             print(f"  Existing document_id: {existing_doc_id}")
             print(f"  Existing filename: {existing_filename}")
             print(f"  Uploaded: {datetime.fromtimestamp(existing_timestamp)}")
-            print(f"  Skipping duplicate upload, no processing needed.")
+            print(f"[DOC:{document_id}] Cleaning up previous upload to reprocess...")
             
-            # Delete the duplicate file from S3
-            s3_client.delete_object(Bucket=PDF_BUCKET, Key=pdf_key)
-            
-            return {
-                'statusCode': 200,
-                'body': json.dumps({
-                    'message': 'Duplicate file detected - already processed',
-                    'existing_document_id': existing_doc_id,
-                    'duplicate': True
-                })
-            }
+            # Clean up all data from previous upload
+            try:
+                # Delete all pages from S3 pages bucket
+                print(f"[DOC:{document_id}] Deleting pages from S3 bucket {PAGES_BUCKET}")
+                pages_response = s3_client.list_objects_v2(Bucket=PAGES_BUCKET, Prefix=f"{existing_doc_id}/")
+                if 'Contents' in pages_response:
+                    for obj in pages_response['Contents']:
+                        s3_client.delete_object(Bucket=PAGES_BUCKET, Key=obj['Key'])
+                    print(f"[DOC:{document_id}] Deleted {len(pages_response['Contents'])} page files from S3")
+                
+                # Delete from DynamoDB tables
+                pages_table = dynamodb.Table('HealthAI-Pages')
+                categories_table = dynamodb.Table('HealthAI-Categories')
+                procedures_table = dynamodb.Table('HealthAI-Procedures')
+                medications_table = dynamodb.Table('HealthAI-Medications')
+                diagnoses_table = dynamodb.Table('HealthAI-Diagnoses')
+                radiology_table = dynamodb.Table('HealthAI-Radiology')
+                tests_table = dynamodb.Table('HealthAI-TestResults')
+                
+                # Delete pages
+                pages_response = pages_table.scan(
+                    FilterExpression='document_id = :doc_id',
+                    ExpressionAttributeValues={':doc_id': existing_doc_id}
+                )
+                for page in pages_response.get('Items', []):
+                    pages_table.delete_item(Key={'page_id': page['page_id']})
+                print(f"[DOC:{document_id}] Deleted {len(pages_response.get('Items', []))} pages from DynamoDB")
+                
+                # Delete related data
+                table_configs = [
+                    ('Categories', categories_table, 'category_id'),
+                    ('Procedures', procedures_table, 'procedure_id'),
+                    ('Medications', medications_table, 'medication_id'),
+                    ('Diagnoses', diagnoses_table, 'diagnosis_id'),
+                    ('Radiology', radiology_table, 'radiology_id'),
+                    ('TestResults', tests_table, 'test_id')
+                ]
+                
+                for table_name, table, key_field in table_configs:
+                    response = table.scan(
+                        FilterExpression='document_id = :doc_id',
+                        ExpressionAttributeValues={':doc_id': existing_doc_id}
+                    )
+                    for item in response.get('Items', []):
+                        table.delete_item(Key={key_field: item[key_field]})
+                    print(f"[DOC:{document_id}] Deleted {len(response.get('Items', []))} {table_name} records")
+                
+                # Delete document record
+                documents_table.delete_item(Key={'document_id': existing_doc_id})
+                print(f"[DOC:{document_id}] Deleted document record")
+                
+                # Delete old document file from S3
+                old_s3_key = existing_doc.get('s3_key', pdf_key)
+                s3_client.delete_object(Bucket=PDF_BUCKET, Key=old_s3_key)
+                print(f"[DOC:{document_id}] Deleted old document file from S3")
+                
+                print(f"[DOC:{document_id}] Cleanup complete. Processing new upload...")
+                
+            except Exception as e:
+                print(f"[DOC:{document_id}] Error during cleanup: {str(e)}")
+                # Continue with processing even if cleanup fails
         
         # Get PDF page count using PyPDF2 (more reliable in Lambda)
         try:
