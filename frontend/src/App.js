@@ -334,9 +334,9 @@ function ProcessingStatusHome() {
           return {
             document_id: doc.document_id,
             patient_id: doc.patient_id || 'Unknown',
-            patient_name: doc.patient_name || 'Unknown',
-            filename: doc.original_filename || 'Unknown',
-            upload_date: doc.upload_timestamp || doc.created_at || 'Unknown',
+            patient_name: doc.patient_name_hint || doc.patient_name || 'Unknown',
+            filename: doc.filename || doc.original_filename || 'Unknown',
+            upload_date: doc.upload_timestamp ? doc.upload_timestamp * 1000 : (doc.created_at || Date.now()),
             total_pages: doc.total_pages || 0,
             processed_pages: processedPages,
             status: processedPages >= (doc.total_pages || 0) ? 'Complete' : 'Processing',
@@ -348,9 +348,9 @@ function ProcessingStatusHome() {
           return {
             document_id: doc.document_id,
             patient_id: doc.patient_id || 'Unknown',
-            patient_name: doc.patient_name || 'Unknown',
-            filename: doc.original_filename || 'Unknown',
-            upload_date: doc.upload_timestamp || 'Unknown',
+            patient_name: doc.patient_name_hint || doc.patient_name || 'Unknown',
+            filename: doc.filename || doc.original_filename || 'Unknown',
+            upload_date: doc.upload_timestamp ? doc.upload_timestamp * 1000 : Date.now(),
             total_pages: doc.total_pages || 0,
             processed_pages: 0,
             status: 'Error',
@@ -378,10 +378,11 @@ function ProcessingStatusHome() {
     return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
   };
 
-  const formatDate = (dateStr) => {
-    if (!dateStr || dateStr === 'Unknown') return 'Unknown';
+  const formatDate = (timestamp) => {
+    if (!timestamp || timestamp === 'Unknown') return 'Unknown';
     try {
-      const date = new Date(dateStr);
+      // If it's a number, treat it as milliseconds timestamp
+      const date = typeof timestamp === 'number' ? new Date(timestamp) : new Date(timestamp);
       return date.toLocaleString('en-US', {
         year: 'numeric',
         month: 'short',
@@ -390,7 +391,7 @@ function ProcessingStatusHome() {
         minute: '2-digit'
       });
     } catch (err) {
-      return dateStr;
+      return 'Unknown';
     }
   };
 
@@ -4604,10 +4605,11 @@ function StatusTab({ patientId }) {
     return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
   };
 
-  const formatDate = (dateStr) => {
-    if (!dateStr || dateStr === 'Unknown') return 'Unknown';
+  const formatDate = (timestamp) => {
+    if (!timestamp || timestamp === 'Unknown') return 'Unknown';
     try {
-      const date = new Date(dateStr);
+      // If it's a number, treat it as milliseconds timestamp
+      const date = typeof timestamp === 'number' ? new Date(timestamp) : new Date(timestamp);
       return date.toLocaleString('en-US', {
         year: 'numeric',
         month: 'short',
@@ -4616,7 +4618,7 @@ function StatusTab({ patientId }) {
         minute: '2-digit'
       });
     } catch (err) {
-      return dateStr;
+      return 'Unknown';
     }
   };
 
