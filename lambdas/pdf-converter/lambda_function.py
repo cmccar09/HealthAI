@@ -40,13 +40,32 @@ def lambda_handler(event, context):
         
         print(f"Converting page {page_number}/{total_pages} of document {document_id}")
         
-        # Download PDF from S3
-        pdf_obj = s3_client.get_object(Bucket=pdf_bucket, Key=pdf_key)
-        pdf_content = pdf_obj['Body'].read()
-        
-        # Open PDF and get specific page
-        pdf_doc = fitz.open(stream=pdf_content, filetype="pdf")
-        page = pdf_doc[page_number - 1]  # Convert to 0-indexed
+        try:
+            # Download PDF from S3
+            pdf_obj = s3_client.get_object(Bucket=pdf_bucket, Key=pdf_key)
+            pdf_content = pdf_obj['Body'].read()
+            
+            # Open PDF and get specific page
+            pdf_doc = fitz.open(stream=pdf_content, filetype="pdf")
+            
+            # Check if page actually exists
+            actual_page_count = len(pdf_doc)
+            if page_number > actual_page_count:
+                print(f"WARN: Page {page_number} does not exist (PDF has {actual_page_count} pages). Skipping.")
+                # Delete message from queue without retrying
+                return {
+                    'statusCode': 200,
+                    'body': json.dumps(f'Page {page_number} skipped - does not exist')
+                }
+            
+            page = pdf_doc[page_number - 1]  # Convert to 0-indexed
+        except IndexError as e:
+            print(f"ERROR: Page {page_number} not found in PDF: {e}. Skipping.")
+            # Delete message from queue without retrying
+            return {
+                'statusCode': 200,
+                'body': json.dumps(f'Page {page_number} skipped - index error')
+            }
         
         pages_table = dynamodb.Table(PAGES_TABLE)
         documents_table = dynamodb.Table(DOCUMENTS_TABLE)

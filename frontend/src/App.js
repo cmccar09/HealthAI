@@ -639,6 +639,7 @@ function PatientDashboard() {
 
   return (
     <div className="patient-dashboard">
+      <Link to="/" className="back-link">← Back to Home</Link>
       <div className="patient-header">
         <div className="header-section">
           <h1>Patient - {firstName.toLowerCase()} {lastName.toLowerCase()}</h1>
