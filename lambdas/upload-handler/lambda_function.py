@@ -2,6 +2,7 @@ import json
 import boto3
 import uuid
 import os
+import hashlib
 from datetime import datetime
 from decimal import Decimal
 from urllib.parse import unquote_plus
@@ -49,10 +50,46 @@ def lambda_handler(event, context):
             Key=pdf_key
         )
         
-        # Get PDF page count using PyPDF2 (more reliable in Lambda)
+        # Get PDF content for hashing and page counting
         pdf_obj = s3_client.get_object(Bucket=PDF_BUCKET, Key=pdf_key)
         pdf_content = pdf_obj['Body'].read()
         
+        # Calculate SHA-256 hash of file content for duplicate detection
+        file_hash = hashlib.sha256(pdf_content).hexdigest()
+        print(f"[DOC:{document_id}] File hash: {file_hash}")
+        
+        # Check if this exact file has already been uploaded
+        documents_table = dynamodb.Table(DOCUMENTS_TABLE)
+        existing_docs = documents_table.scan(
+            FilterExpression='file_hash = :hash',
+            ExpressionAttributeValues={':hash': file_hash}
+        )
+        
+        if existing_docs.get('Items'):
+            existing_doc = existing_docs['Items'][0]
+            existing_doc_id = existing_doc['document_id']
+            existing_filename = existing_doc.get('filename', 'Unknown')
+            existing_timestamp = existing_doc.get('upload_timestamp', 0)
+            
+            print(f"[DOC:{document_id}] DUPLICATE DETECTED! Same file already uploaded:")
+            print(f"  Existing document_id: {existing_doc_id}")
+            print(f"  Existing filename: {existing_filename}")
+            print(f"  Uploaded: {datetime.fromtimestamp(existing_timestamp)}")
+            print(f"  Skipping duplicate upload, no processing needed.")
+            
+            # Delete the duplicate file from S3
+            s3_client.delete_object(Bucket=PDF_BUCKET, Key=pdf_key)
+            
+            return {
+                'statusCode': 200,
+                'body': json.dumps({
+                    'message': 'Duplicate file detected - already processed',
+                    'existing_document_id': existing_doc_id,
+                    'duplicate': True
+                })
+            }
+        
+        # Get PDF page count using PyPDF2 (more reliable in Lambda)
         try:
             from PyPDF2 import PdfReader
             import io
@@ -67,7 +104,6 @@ def lambda_handler(event, context):
             print(f"[DOC:{document_id}] Estimated {total_pages} pages based on file size")
         
         # Create document record in DynamoDB
-        documents_table = dynamodb.Table(DOCUMENTS_TABLE)
         timestamp = int(datetime.utcnow().timestamp())
         
         documents_table.put_item(
@@ -76,6 +112,7 @@ def lambda_handler(event, context):
                 'patient_id': 'PENDING',  # Will be updated after extraction
                 'filename': filename,
                 'pdf_s3_key': pdf_key,
+                'file_hash': file_hash,  # Store hash for duplicate detection
                 'upload_timestamp': timestamp,
                 'total_pages': total_pages,
                 'status': 'UPLOADED',
