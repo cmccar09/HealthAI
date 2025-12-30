@@ -162,8 +162,12 @@ def lambda_handler(event, context):
             if providers:
                 store_providers(document_id, page_id, page_number, providers)
             
-            # Update page status
+            # Check if page was already processed (to prevent double-counting)
             pages_table = dynamodb.Table(PAGES_TABLE)
+            page_response = pages_table.get_item(Key={'page_id': page_id})
+            was_already_processed = page_response.get('Item', {}).get('ai_processed', False)
+            
+            # Update page status
             pages_table.update_item(
                 Key={'page_id': page_id},
                 UpdateExpression='SET ai_processed = :processed, #status = :status, categories = :cats',
@@ -175,15 +179,17 @@ def lambda_handler(event, context):
                 }
             )
             
-            # Update document progress
-            documents_table = dynamodb.Table(DOCUMENTS_TABLE)
-            documents_table.update_item(
-                Key={'document_id': document_id},
-                UpdateExpression='ADD pages_processed :inc',
-                ExpressionAttributeValues={':inc': 1}
-            )
-            
-            print(f"[DOC:{document_id}] Page {page_number}/{total_pages} processed successfully")
+            # Update document progress ONLY if this is the first time processing this page
+            if not was_already_processed:
+                documents_table = dynamodb.Table(DOCUMENTS_TABLE)
+                documents_table.update_item(
+                    Key={'document_id': document_id},
+                    UpdateExpression='ADD pages_processed :inc',
+                    ExpressionAttributeValues={':inc': 1}
+                )
+                print(f"[DOC:{document_id}] Page {page_number}/{total_pages} processed successfully (counter incremented)")
+            else:
+                print(f"[DOC:{document_id}] Page {page_number}/{total_pages} reprocessed (counter NOT incremented)")
             
         except ClientError as e:
             error_code = e.response.get('Error', {}).get('Code', '')
