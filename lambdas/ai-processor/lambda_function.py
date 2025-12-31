@@ -102,6 +102,12 @@ def lambda_handler(event, context):
             # Extract ALL data in one call (5x faster, 80% cheaper)
             extracted_data = extract_comprehensive_data(base64_image, page_number)
             
+            # Store page group information if detected
+            page_group = extracted_data.get('page_group', {})
+            if page_group.get('current_page') and page_group.get('total_pages'):
+                print(f"[DOC:{document_id}] Page group detected: {page_group.get('current_page')} of {page_group.get('total_pages')} - {page_group.get('group_title', 'No title')}")
+                update_page_group_info(page_id, page_group)
+            
             # Store patient data (first page only)
             if page_number == 1 and extracted_data.get('patient_data'):
                 patient_data = extracted_data['patient_data']
@@ -339,9 +345,22 @@ def extract_comprehensive_data(image_base64, page_number):
     if page_number == 1:
         prompt = """Extract comprehensive clinical data in this EXACT JSON format:
 
-{"patient_data":{"patient_first_name":"","patient_last_name":"","patient_dob":"YYYY-MM-DD","patient_ssn":"","patient_mrn":"","medical_facility":"","gender":"","blood_type":"","email":"","phone_number":"","address_line1":"","city":"","state":"","postal_code":"","country":"","emergency_contact_name":"","emergency_contact_phone":"","allergies":"","document_date":"YYYY-MM-DD"},"categories":[{"name":"Cardiology","reason":""}],"medications":[{"medication_name":"","dosage":"","frequency":"","route":"","start_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","is_current":"yes/no","prescribing_doctor":"","notes":""}],"diagnoses":[{"diagnosis_description":"","diagnosis_code":"","diagnosed_date":"YYYY-MM-DD","is_current":"yes/no","diagnosing_doctor_first_name":"","diagnosing_doctor_last_name":"","diagnosing_doctor_specialty":"","diagnosing_facility_name":"","specialty_relevance":"","notes":""}],"test_results":[{"test_name":"","test_date":"YYYY-MM-DD","result_value":"","result_unit":"","is_abnormal":"yes/no","normal_range_low":"","normal_range_high":"","ordering_doctor":"","notes":""}],"procedures":[{"procedure_name":"","procedure_code":"","procedure_date":"YYYY-MM-DD","performing_doctor_first_name":"","performing_doctor_last_name":"","facility":"","indication":"","outcome":"","complications":"","notes":""}],"radiology":[{"study_type":"","modality":"","body_part":"","exam_date":"YYYY-MM-DD","findings":"","impression":"","radiologist_name":"","facility":"","is_abnormal":"yes/no","notes":""}],"family_history":[{"relationship":"","condition":"","age_at_diagnosis":"","is_deceased":"yes/no","age_at_death":"","cause_of_death":"","notes":""}],"social_history":{"smoking_status":"","alcohol_use":"","drug_use":"","occupation":"","marital_status":"","living_situation":"","exercise_frequency":"","diet_type":"","notes":""},"providers":[{"doctor_first_name":"","doctor_last_name":"","specialty":"","role_in_care":"","facility":"","contact_info":""}]}
+{"page_group":{"current_page":"","total_pages":"","group_title":""},"patient_data":{"patient_first_name":"","patient_last_name":"","patient_dob":"YYYY-MM-DD","patient_ssn":"","patient_mrn":"","medical_facility":"","gender":"","blood_type":"","email":"","phone_number":"","address_line1":"","city":"","state":"","postal_code":"","country":"","emergency_contact_name":"","emergency_contact_phone":"","allergies":"","document_date":"YYYY-MM-DD"},"categories":[{"name":"Cardiology","reason":""}],"medications":[{"medication_name":"","dosage":"","frequency":"","route":"","start_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","is_current":"yes/no","prescribing_doctor":"","notes":""}],"diagnoses":[{"diagnosis_description":"","diagnosis_code":"","diagnosed_date":"YYYY-MM-DD","is_current":"yes/no","diagnosing_doctor_first_name":"","diagnosing_doctor_last_name":"","diagnosing_doctor_specialty":"","diagnosing_facility_name":"","specialty_relevance":"","notes":""}],"test_results":[{"test_name":"","test_date":"YYYY-MM-DD","result_value":"","result_unit":"","is_abnormal":"yes/no","normal_range_low":"","normal_range_high":"","ordering_doctor":"","notes":""}],"procedures":[{"procedure_name":"","procedure_code":"","procedure_date":"YYYY-MM-DD","performing_doctor_first_name":"","performing_doctor_last_name":"","facility":"","indication":"","outcome":"","complications":"","notes":""}],"radiology":[{"study_type":"","modality":"","body_part":"","exam_date":"YYYY-MM-DD","findings":"","impression":"","radiologist_name":"","facility":"","is_abnormal":"yes/no","notes":""}],"family_history":[{"relationship":"","condition":"","age_at_diagnosis":"","is_deceased":"yes/no","age_at_death":"","cause_of_death":"","notes":""}],"social_history":{"smoking_status":"","alcohol_use":"","drug_use":"","occupation":"","marital_status":"","living_situation":"","exercise_frequency":"","diet_type":"","notes":""},"providers":[{"doctor_first_name":"","doctor_last_name":"","specialty":"","role_in_care":"","facility":"","contact_info":""}]}
 
 CRITICAL EXTRACTION RULES:
+
+0. PAGE GROUPING - DETECT SUB-DOCUMENTS:
+   - Look for page numbering like "Page 1 of 5", "1 of 5", "Page X/Y", etc. in headers, footers, or corners
+   - Extract current_page (the current page number within this sub-document group)
+   - Extract total_pages (total pages in this sub-document group)
+   - Extract group_title (document title, report name, or type if visible near the page numbering)
+   - Examples: 
+     * "Page 2 of 5" → {"current_page":"2","total_pages":"5","group_title":""}
+     * "Radiology Report - Page 1 of 3" → {"current_page":"1","total_pages":"3","group_title":"Radiology Report"}
+     * "Lab Results 3/7" → {"current_page":"3","total_pages":"7","group_title":"Lab Results"}
+   - If no page grouping visible, leave all fields empty: {"current_page":"","total_pages":"","group_title":""}
+
+1. DATES: ALL dates must be in YYYY-MM-DD format (e.g., 2023-01-15). If year only, use YYYY-01-01. If month/year, use YYYY-MM-01. Never use slash format or invalid dates.
 
 1. DATES: ALL dates must be in YYYY-MM-DD format (e.g., 2023-01-15). If year only, use YYYY-01-01. If month/year, use YYYY-MM-01. Never use slash format or invalid dates.
 
@@ -606,9 +625,22 @@ Categories must use exact names from list above. Empty array [] if page has no m
     else:
         prompt = """Extract clinical data in this EXACT JSON format:
 
-{"categories":[{"name":"Cardiology","reason":""}],"medications":[{"medication_name":"","dosage":"","frequency":"","route":"","start_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","is_current":"yes/no","prescribing_doctor":"","notes":""}],"diagnoses":[{"diagnosis_description":"","diagnosis_code":"","diagnosed_date":"YYYY-MM-DD","is_current":"yes/no","diagnosing_doctor_first_name":"","diagnosing_doctor_last_name":"","diagnosing_doctor_specialty":"","diagnosing_facility_name":"","specialty_relevance":"","notes":""}],"test_results":[{"test_name":"","test_date":"YYYY-MM-DD","result_value":"","result_unit":"","is_abnormal":"yes/no","normal_range_low":"","normal_range_high":"","ordering_doctor":"","notes":""}],"procedures":[{"procedure_name":"","procedure_code":"","procedure_date":"YYYY-MM-DD","performing_doctor_first_name":"","performing_doctor_last_name":"","facility":"","indication":"","outcome":"","complications":"","notes":""}],"radiology":[{"study_type":"","modality":"","body_part":"","exam_date":"YYYY-MM-DD","findings":"","impression":"","radiologist_name":"","facility":"","is_abnormal":"yes/no","notes":""}],"family_history":[{"relationship":"","condition":"","age_at_diagnosis":"","is_deceased":"yes/no","age_at_death":"","cause_of_death":"","notes":""}],"social_history":{"smoking_status":"","alcohol_use":"","drug_use":"","occupation":"","marital_status":"","living_situation":"","exercise_frequency":"","diet_type":"","notes":""},"providers":[{"doctor_first_name":"","doctor_last_name":"","specialty":"","role_in_care":"","facility":"","contact_info":""}]}
+{"page_group":{"current_page":"","total_pages":"","group_title":""},"categories":[{"name":"Cardiology","reason":""}],"medications":[{"medication_name":"","dosage":"","frequency":"","route":"","start_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","is_current":"yes/no","prescribing_doctor":"","notes":""}],"diagnoses":[{"diagnosis_description":"","diagnosis_code":"","diagnosed_date":"YYYY-MM-DD","is_current":"yes/no","diagnosing_doctor_first_name":"","diagnosing_doctor_last_name":"","diagnosing_doctor_specialty":"","diagnosing_facility_name":"","specialty_relevance":"","notes":""}],"test_results":[{"test_name":"","test_date":"YYYY-MM-DD","result_value":"","result_unit":"","is_abnormal":"yes/no","normal_range_low":"","normal_range_high":"","ordering_doctor":"","notes":""}],"procedures":[{"procedure_name":"","procedure_code":"","procedure_date":"YYYY-MM-DD","performing_doctor_first_name":"","performing_doctor_last_name":"","facility":"","indication":"","outcome":"","complications":"","notes":""}],"radiology":[{"study_type":"","modality":"","body_part":"","exam_date":"YYYY-MM-DD","findings":"","impression":"","radiologist_name":"","facility":"","is_abnormal":"yes/no","notes":""}],"family_history":[{"relationship":"","condition":"","age_at_diagnosis":"","is_deceased":"yes/no","age_at_death":"","cause_of_death":"","notes":""}],"social_history":{"smoking_status":"","alcohol_use":"","drug_use":"","occupation":"","marital_status":"","living_situation":"","exercise_frequency":"","diet_type":"","notes":""},"providers":[{"doctor_first_name":"","doctor_last_name":"","specialty":"","role_in_care":"","facility":"","contact_info":""}]}
 
 CRITICAL EXTRACTION RULES:
+
+0. PAGE GROUPING - DETECT SUB-DOCUMENTS:
+   - Look for page numbering like "Page 1 of 5", "1 of 5", "Page X/Y", etc. in headers, footers, or corners
+   - Extract current_page (the current page number within this sub-document group)
+   - Extract total_pages (total pages in this sub-document group)
+   - Extract group_title (document title, report name, or type if visible near the page numbering)
+   - Examples: 
+     * "Page 2 of 5" → {"current_page":"2","total_pages":"5","group_title":""}
+     * "Radiology Report - Page 1 of 3" → {"current_page":"1","total_pages":"3","group_title":"Radiology Report"}
+     * "Lab Results 3/7" → {"current_page":"3","total_pages":"7","group_title":"Lab Results"}
+   - If no page grouping visible, leave all fields empty: {"current_page":"","total_pages":"","group_title":""}
+
+1. DATES: ALL dates must be in YYYY-MM-DD format (e.g., 2023-01-15). If year only, use YYYY-01-01. If month/year, use YYYY-MM-01. Never use slash format or invalid dates.
 
 1. DATES: ALL dates must be in YYYY-MM-DD format (e.g., 2023-01-15). If year only, use YYYY-01-01. If month/year, use YYYY-MM-01. Never use slash format or invalid dates.
 
@@ -1168,6 +1200,32 @@ def store_categories(page_id, document_id, categories):
                 'reason': cat.get('reason', 'Unknown')
             }
         )
+
+
+def update_page_group_info(page_id, page_group):
+    """Update page with sub-document grouping information to link related pages together."""
+    
+    pages_table = dynamodb.Table(PAGES_TABLE)
+    
+    try:
+        # Generate a group identifier based on total pages and title
+        # This allows us to find all pages in the same sub-document group
+        group_title_clean = page_group.get('group_title', 'untitled').lower().replace(' ', '_')
+        group_id = f"{page_group.get('total_pages', 'unknown')}_{group_title_clean}"
+        
+        pages_table.update_item(
+            Key={'page_id': page_id},
+            UpdateExpression='SET page_group_current = :current, page_group_total = :total, page_group_title = :title, page_group_id = :group_id',
+            ExpressionAttributeValues={
+                ':current': page_group.get('current_page', ''),
+                ':total': page_group.get('total_pages', ''),
+                ':title': page_group.get('group_title', ''),
+                ':group_id': group_id
+            }
+        )
+        print(f"Updated page {page_id} with group info: {page_group.get('current_page')} of {page_group.get('total_pages')} (Group ID: {group_id})")
+    except Exception as e:
+        print(f"Error updating page group info: {str(e)}")
 
 
 def store_medications(document_id, page_id, medications):
