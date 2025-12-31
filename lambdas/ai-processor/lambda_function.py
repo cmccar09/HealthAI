@@ -250,7 +250,7 @@ def call_claude(prompt, image_base64):
                 accept='application/json',
                 body=json.dumps({
                     'anthropic_version': 'bedrock-2023-05-31',
-                    'max_tokens': 1500,  # Reduced from 2000 - JSON responses are typically <1500 tokens
+                    'max_tokens': 4000,  # Increased to support comprehensive clinical narratives
                     'temperature': 0,  # Deterministic for consistency
                     'system': [
                         {
@@ -353,18 +353,100 @@ CRITICAL EXTRACTION RULES:
    - Extract ICD codes if visible
    - Extract doctor name and specialty from diagnosis section
    - Set is_current based on context (yes if active/ongoing, no if historical/resolved)
-   - NOTES FIELD - COMPREHENSIVE CLINICAL SUMMARY: Generate a detailed clinical summary that includes:
-     * Current treatment approach and medications being used for this condition
-     * Relevant laboratory findings with specific values and reference ranges
-     * Clinical progression or trends (improving, stable, worsening)
-     * Complications or comorbidities related to this diagnosis
-     * Specific clinical concerns or red flags (e.g., ketonuria in diabetic, elevated PSA, abnormal imaging)
-     * Treatment efficacy assessment (e.g., "Despite ongoing treatment, glycemic control remains suboptimal")
-     * Upcoming follow-ups, scheduled procedures, or recommended interventions
-     * Patient-specific factors affecting the condition (obesity, compliance, contraindications)
-     * Risk stratification or prognostic information if mentioned (e.g., Gleason score, NCCN risk group)
-     * All relevant clinical context that helps understand the diagnosis trajectory and urgency
-   - Make notes field a comprehensive narrative that synthesizes ALL information about this diagnosis from the entire document
+   
+   - NOTES FIELD - COMPREHENSIVE CLINICAL NARRATIVE (CRITICAL):
+     Generate a detailed, professional clinical summary that synthesizes ALL available information about this diagnosis.
+     Write in complete sentences as if you were a physician documenting a case summary.
+     
+     REQUIRED ELEMENTS TO INCLUDE (when present in the document):
+     
+     A. INITIAL PRESENTATION & DIAGNOSTIC WORKUP:
+        * How the condition was first identified (symptoms, screening, incidental finding)
+        * Initial diagnostic tests and their results with SPECIFIC VALUES
+        * Confirmatory testing performed or recommended
+        * Timeline of diagnosis (initial presentation date → confirmation date)
+     
+     B. LABORATORY DATA & CLINICAL MEASUREMENTS:
+        * Specific lab values with units and reference ranges (e.g., "fasting glucose 126 mg/dL (goal <100 mg/dL)")
+        * Trends over time (e.g., "eGFR declining from 85 to 68 mL/min/1.73m²")
+        * Abnormal findings and their clinical significance (e.g., "3+ glucosuria and 2+ ketonuria, worrisome for metabolic decompensation")
+        * Point-of-care measurements vs. formal lab testing
+        * Multiple test dates and their values when available
+     
+     C. STAGING & RISK STRATIFICATION:
+        * Disease stage or grade (e.g., "Gleason score 4+4=8", "Stage 2 CKD", "NCCN High Risk Group")
+        * Clinical stage (e.g., "T1c", "mild eosinophilia")
+        * Severity classification and its implications
+        * Risk factors and prognostic indicators
+     
+     D. CURRENT TREATMENT & MANAGEMENT:
+        * Current medications with dosages and their indications for THIS specific diagnosis
+        * Response to current therapy (adequate vs. inadequate control)
+        * Treatment failures or need for escalation
+        * Non-pharmacologic interventions
+        * Multidisciplinary involvement (e.g., "Endocrinology follow-up scheduled")
+     
+     E. DISEASE PROGRESSION & TRAJECTORY:
+        * Temporal changes in condition (improving/stable/worsening)
+        * NEW developments or complications (e.g., "NEW ketonuria has developed")
+        * Comparison to baseline or prior states
+        * Rate of progression
+        * Evidence-based assessment of disease trajectory
+     
+     F. CLINICAL CONCERNS & RED FLAGS:
+        * Worrisome findings requiring urgent attention
+        * Potential complications or risks
+        * Indicators of treatment failure
+        * Signs of metabolic decompensation or acute changes
+        * Concerns about disease control or management adequacy
+     
+     G. COMORBIDITIES & CONTRIBUTING FACTORS:
+        * Related conditions affecting this diagnosis
+        * Patient factors impacting disease (e.g., "obese, contributing to insulin resistance")
+        * Interactions with other active conditions
+        * Social determinants affecting management
+     
+     H. OUTSTANDING WORKUP & RECOMMENDATIONS:
+        * Recommended diagnostic studies not yet completed
+        * Follow-up testing needed
+        * Specialist consultations recommended
+        * Imaging or procedures indicated
+        * Documentation gaps in the medical record
+     
+     I. TREATMENT PLANS & NEXT STEPS:
+        * Planned interventions or procedures with specific details
+        * Treatment options discussed with patient
+        * Upcoming appointments or follow-ups
+        * Monitoring plans
+        * Urgent interventions needed
+     
+     J. HISTORICAL CONTEXT:
+        * Prior treatments attempted and their outcomes
+        * Previous surgical interventions (e.g., "local recurrence after prior focal therapy")
+        * Changes in management over time
+        * Long-term disease course
+     
+     FORMATTING GUIDELINES:
+     * Write as flowing narrative paragraphs, not bullet points
+     * Use medical terminology appropriately
+     * Include specific quantitative data whenever available
+     * State explicit clinical assessments (e.g., "The condition appears to be worsening...")
+     * Use temporal markers (e.g., "By 2023-01-01, six years after initial presentation...")
+     * Emphasize clinical significance and actionable findings
+     * Use bold or emphasis for critical findings: **Condition is WORSENING**, **NEW ketonuria**
+     * End with clear assessment of current status and trajectory
+     
+     MINIMUM LENGTH: Aim for 150-300 words for significant diagnoses
+     
+     EXAMPLE STYLE (match this level of detail):
+     "Patient presented with severe glucosuria (≥1000 mg/dL) at age 16 in 2017-01-01, highly suggestive of new-onset diabetes mellitus. 
+     Initial urinalysis showed no ketones with otherwise normal parameters. By 2023-01-01, six years after initial presentation, 
+     patient demonstrates persistent severe glucosuria (3+) indicating ongoing poor glycemic control. Critically, NEW ketonuria has developed, 
+     progressing from absent ketones in 2017 to 1-2+ ketonuria in 2023, representing significant metabolic decompensation. 
+     The combination of persistent glucosuria with emerging ketonuria suggests inadequate diabetes management and risk of diabetic ketoacidosis. 
+     **Condition is WORSENING** based on the development of ketonuria alongside persistent glucosuria, indicating progressive metabolic 
+     dysfunction and failure to achieve adequate diabetes control over the six-year period. No documentation of treatment regimen or 
+     clinical management strategies is provided, representing a critical gap in the medical record."
 
 3. LAB RESULTS TABLES:
    - If you see a table with test names in rows and dates in columns, extract EACH cell as a separate test_result
@@ -538,19 +620,100 @@ CRITICAL EXTRACTION RULES:
    - Extract ICD codes if visible
    - Extract doctor name and specialty from diagnosis section
    - Set is_current based on context (yes if active/ongoing, no if historical/resolved)
-   - NOTES FIELD - COMPREHENSIVE CLINICAL SUMMARY: Generate a detailed clinical summary that includes:
-     * Current treatment approach and medications being used for this condition
-     * Relevant laboratory findings with specific values and reference ranges
-     * Clinical progression or trends (improving, stable, worsening)
-     * Complications or comorbidities related to this diagnosis
-     * Specific clinical concerns or red flags (e.g., ketonuria in diabetic, elevated PSA, abnormal imaging)
-     * Treatment efficacy assessment (e.g., "Despite ongoing treatment, glycemic control remains suboptimal")
-     * Upcoming follow-ups, scheduled procedures, or recommended interventions
-     * Patient-specific factors affecting the condition (obesity, compliance, contraindications)
-     * Risk stratification or prognostic information if mentioned (e.g., Gleason score, NCCN risk group)
-     * All relevant clinical context that helps understand the diagnosis trajectory and urgency
-   - Make notes field a comprehensive narrative that synthesizes ALL information about this diagnosis from the entire document
-   - Set is_current based on context (yes if active/ongoing, no if historical/resolved)
+   
+   - NOTES FIELD - COMPREHENSIVE CLINICAL NARRATIVE (CRITICAL):
+     Generate a detailed, professional clinical summary that synthesizes ALL available information about this diagnosis.
+     Write in complete sentences as if you were a physician documenting a case summary.
+     
+     REQUIRED ELEMENTS TO INCLUDE (when present in the document):
+     
+     A. INITIAL PRESENTATION & DIAGNOSTIC WORKUP:
+        * How the condition was first identified (symptoms, screening, incidental finding)
+        * Initial diagnostic tests and their results with SPECIFIC VALUES
+        * Confirmatory testing performed or recommended
+        * Timeline of diagnosis (initial presentation date → confirmation date)
+     
+     B. LABORATORY DATA & CLINICAL MEASUREMENTS:
+        * Specific lab values with units and reference ranges (e.g., "fasting glucose 126 mg/dL (goal <100 mg/dL)")
+        * Trends over time (e.g., "eGFR declining from 85 to 68 mL/min/1.73m²")
+        * Abnormal findings and their clinical significance (e.g., "3+ glucosuria and 2+ ketonuria, worrisome for metabolic decompensation")
+        * Point-of-care measurements vs. formal lab testing
+        * Multiple test dates and their values when available
+     
+     C. STAGING & RISK STRATIFICATION:
+        * Disease stage or grade (e.g., "Gleason score 4+4=8", "Stage 2 CKD", "NCCN High Risk Group")
+        * Clinical stage (e.g., "T1c", "mild eosinophilia")
+        * Severity classification and its implications
+        * Risk factors and prognostic indicators
+     
+     D. CURRENT TREATMENT & MANAGEMENT:
+        * Current medications with dosages and their indications for THIS specific diagnosis
+        * Response to current therapy (adequate vs. inadequate control)
+        * Treatment failures or need for escalation
+        * Non-pharmacologic interventions
+        * Multidisciplinary involvement (e.g., "Endocrinology follow-up scheduled")
+     
+     E. DISEASE PROGRESSION & TRAJECTORY:
+        * Temporal changes in condition (improving/stable/worsening)
+        * NEW developments or complications (e.g., "NEW ketonuria has developed")
+        * Comparison to baseline or prior states
+        * Rate of progression
+        * Evidence-based assessment of disease trajectory
+     
+     F. CLINICAL CONCERNS & RED FLAGS:
+        * Worrisome findings requiring urgent attention
+        * Potential complications or risks
+        * Indicators of treatment failure
+        * Signs of metabolic decompensation or acute changes
+        * Concerns about disease control or management adequacy
+     
+     G. COMORBIDITIES & CONTRIBUTING FACTORS:
+        * Related conditions affecting this diagnosis
+        * Patient factors impacting disease (e.g., "obese, contributing to insulin resistance")
+        * Interactions with other active conditions
+        * Social determinants affecting management
+     
+     H. OUTSTANDING WORKUP & RECOMMENDATIONS:
+        * Recommended diagnostic studies not yet completed
+        * Follow-up testing needed
+        * Specialist consultations recommended
+        * Imaging or procedures indicated
+        * Documentation gaps in the medical record
+     
+     I. TREATMENT PLANS & NEXT STEPS:
+        * Planned interventions or procedures with specific details
+        * Treatment options discussed with patient
+        * Upcoming appointments or follow-ups
+        * Monitoring plans
+        * Urgent interventions needed
+     
+     J. HISTORICAL CONTEXT:
+        * Prior treatments attempted and their outcomes
+        * Previous surgical interventions (e.g., "local recurrence after prior focal therapy")
+        * Changes in management over time
+        * Long-term disease course
+     
+     FORMATTING GUIDELINES:
+     * Write as flowing narrative paragraphs, not bullet points
+     * Use medical terminology appropriately
+     * Include specific quantitative data whenever available
+     * State explicit clinical assessments (e.g., "The condition appears to be worsening...")
+     * Use temporal markers (e.g., "By 2023-01-01, six years after initial presentation...")
+     * Emphasize clinical significance and actionable findings
+     * Use bold or emphasis for critical findings: **Condition is WORSENING**, **NEW ketonuria**
+     * End with clear assessment of current status and trajectory
+     
+     MINIMUM LENGTH: Aim for 150-300 words for significant diagnoses
+     
+     EXAMPLE STYLE (match this level of detail):
+     "Patient presented with severe glucosuria (≥1000 mg/dL) at age 16 in 2017-01-01, highly suggestive of new-onset diabetes mellitus. 
+     Initial urinalysis showed no ketones with otherwise normal parameters. By 2023-01-01, six years after initial presentation, 
+     patient demonstrates persistent severe glucosuria (3+) indicating ongoing poor glycemic control. Critically, NEW ketonuria has developed, 
+     progressing from absent ketones in 2017 to 1-2+ ketonuria in 2023, representing significant metabolic decompensation. 
+     The combination of persistent glucosuria with emerging ketonuria suggests inadequate diabetes management and risk of diabetic ketoacidosis. 
+     **Condition is WORSENING** based on the development of ketonuria alongside persistent glucosuria, indicating progressive metabolic 
+     dysfunction and failure to achieve adequate diabetes control over the six-year period. No documentation of treatment regimen or 
+     clinical management strategies is provided, representing a critical gap in the medical record."
 
 3. LAB RESULTS TABLES:
    - If you see a table with test names in rows and dates in columns, extract EACH cell as a separate test_result

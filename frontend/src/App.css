@@ -348,6 +348,12 @@ body {
   font-size: 0.9rem;
 }
 
+.diagnosis-action-buttons {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
 .download-pdf-btn,
 .download-reports-btn {
   background: var(--primary-color);
@@ -357,7 +363,6 @@ body {
   border-radius: 4px;
   font-weight: 600;
   cursor: pointer;
-  margin-bottom: 1.5rem;
   transition: all 0.2s;
 }
 
@@ -768,9 +773,6 @@ body {
 
 /* Email Broker Button */
 .email-broker-btn {
-  position: absolute;
-  top: 0;
-  right: 0;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
@@ -792,6 +794,11 @@ body {
 .email-broker-btn:active {
   transform: translateY(0);
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+/* For diagnosis section specifically */
+.diagnosis-action-buttons .email-broker-btn {
+  position: static;
 }
 
 
@@ -3220,8 +3227,509 @@ body {
   background-color: var(--primary-hover);
 }
 
+/* Doctors Tab Styles */
+.doctors-content {
+  padding: 1.5rem;
+}
+
+.doctors-table-container {
+  overflow-x: auto;
+  margin-top: 1.5rem;
+}
+
+.doctors-table-container .medical-table {
+  min-width: 100%;
+}
+
+.doctors-table-container .medical-table th,
+.doctors-table-container .medical-table td {
+  padding: 12px;
+}
+
+.doctors-table-container .centered {
+  text-align: center;
+}
+
+.specialty-match-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.85em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.specialty-match-badge.verified-match {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.specialty-match-badge.appropriate {
+  background-color: #d1ecf1;
+  color: #0c5460;
+  border: 1px solid #bee5eb;
+}
+
+.specialty-match-badge.review-recommended {
+  background-color: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
+}
+
+.specialty-match-badge.unverified,
+.specialty-match-badge.unknown,
+.specialty-match-badge.not-verified {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.view-details-btn-small {
+  padding: 6px 12px;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85em;
+  transition: all 0.2s;
+}
+
+.view-details-btn-small:hover {
+  background-color: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+/* Doctor contact info styles */
+.doctor-contact-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.contact-item {
+  display: flex;
+  gap: 1rem;
+  padding: 0.5rem;
+  background: #f9fafb;
+  border-radius: 4px;
+}
+
+.contact-item strong {
+  min-width: 150px;
+  color: var(--text-secondary);
+}
+
+.contact-item span {
+  flex: 1;
+  color: var(--text-primary);
+}
+
+.doctor-name-link {
+  text-decoration: underline;
+}
+
+.doctor-name-link:hover {
+  text-decoration: none;
+  opacity: 0.8;
+}
+
+/* Doctor details wide modal */
+.doctor-details-wide {
+  max-width: 1400px !important;
+  width: 95vw;
+  max-height: 90vh;
+}
+
+.doctor-details-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  max-height: calc(90vh - 120px);
+  overflow: hidden;
+}
+
+.page-viewer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  border-right: 1px solid var(--border-color);
+  padding-right: 2rem;
+}
+
+.page-viewer-section h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.page-image-container {
+  flex: 1;
+  overflow: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: #f9fafb;
+  padding: 1rem;
+  max-height: calc(90vh - 220px);
+}
+
+.page-image-container img {
+  max-width: 100%;
+  display: block;
+  transition: transform 0.2s;
+}
+
+.zoom-controls-inline {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.5rem;
+  background: var(--bg-light);
+  border-radius: 4px;
+}
+
+.zoom-controls-inline button {
+  padding: 0.5rem 1rem;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.zoom-controls-inline button:hover {
+  background: var(--primary-hover);
+}
+
+.zoom-controls-inline span {
+  font-weight: 600;
+  min-width: 50px;
+  text-align: center;
+}
+
+.doctor-info-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  overflow-y: auto;
+  max-height: calc(90vh - 120px);
+  padding-right: 0.5rem;
+}
+
+.scrollable-list {
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.scrollable-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollable-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.scrollable-list::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 3px;
+}
+
+.scrollable-list::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
 .patient-name {
   font-weight: 500;
   color: var(--text-primary);
 }
 
+/* Enhanced Diagnosis Cards - Detailed View */
+.diagnosis-card-detailed {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.diagnosis-card-detailed:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+  border-color: var(--primary-color);
+}
+
+.diagnosis-card-detailed .diagnosis-card-header {
+  border-bottom: 2px solid #f3f4f6;
+  padding-bottom: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.diagnosis-card-detailed .diagnosis-title-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.diagnosis-card-detailed .diagnosis-title-row h4 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.diagnosis-card-meta-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.star-icon {
+  color: #fbbf24;
+  font-size: 1.25rem;
+}
+
+.time-indicator {
+  background: #f3f4f6;
+  color: #6b7280;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.diagnosis-code-badge {
+  background: #eff6ff;
+  color: #1e40af;
+  padding: 0.25rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  align-self: flex-start;
+}
+
+.diagnosis-code-badge-small {
+  background: #f3f4f6;
+  color: #4b5563;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.688rem;
+  font-weight: 500;
+}
+
+.diagnosis-codes-footer {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0;
+  border-top: 1px solid #f3f4f6;
+}
+
+.diagnosis-summary-text-detailed {
+  background: white;
+  padding: 0;
+  border-radius: 0;
+  border-left: none;
+}
+
+.diagnosis-summary-text-detailed p {
+  margin: 0;
+  color: #374151;
+  line-height: 1.7;
+  font-size: 0.938rem;
+  text-align: justify;
+}
+
+.diagnosis-metadata-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid #f3f4f6;
+}
+
+.metadata-row {
+  display: flex;
+  align-items: center;
+}
+
+.metadata-item-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.metadata-item-inline strong {
+  font-size: 0.875rem;
+  color: #6b7280;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.metadata-item-inline span {
+  font-size: 0.875rem;
+  color: #1f2937;
+  font-weight: 500;
+}
+
+.diagnosis-summary-text {
+  background: #f9fafb;
+  border-left: 4px solid var(--primary-color);
+  padding: 1rem;
+  border-radius: 6px;
+}
+
+.diagnosis-summary-text p {
+  margin: 0;
+  color: #4b5563;
+  line-height: 1.6;
+  font-size: 0.938rem;
+}
+
+.diagnosis-metadata {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+.metadata-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.metadata-item strong {
+  font-size: 0.813rem;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.metadata-item span {
+  font-size: 0.938rem;
+  color: #1f2937;
+  font-weight: 500;
+}
+
+.diagnosis-card-detailed .diagnosis-footer {
+  display: flex;
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #f3f4f6;
+}
+
+.diagnosis-card-detailed .diagnosis-footer button {
+  flex: 1;
+  padding: 0.625rem 1rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.diagnosis-card-detailed .view-details-btn {
+  background: var(--primary-color);
+  color: white;
+}
+
+.diagnosis-card-detailed .view-details-btn:hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+}
+
+.diagnosis-card-detailed .view-page-btn {
+  background: white;
+  color: var(--primary-color);
+  border: 2px solid var(--primary-color);
+}
+
+.diagnosis-card-detailed .view-page-btn:hover {
+  background: var(--primary-color);
+  color: white;
+  transform: translateY(-1px);
+}
+
+/* Diagnosis Groups Layout */
+.diagnosis-groups-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.diagnosis-group .group-header {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 3px solid var(--primary-color);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.diagnosis-group .group-count {
+  background: var(--primary-color);
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.diagnosis-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
+  gap: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .diagnosis-cards {
+    grid-template-columns: 1fr;
+  }
+  
+  .diagnosis-metadata {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* NPI Verification Section */
+.npi-verification-section {
+  background: linear-gradient(135deg, #e0f2fe 0%, #dbeafe 100%);
+  border-left: 4px solid #0ea5e9;
+  padding: 1.25rem;
+  border-radius: 8px;
+}
+
+.npi-verification-section h3 {
+  color: #0369a1;
+  margin-bottom: 1rem;
+}
+
+.text-success {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.text-warning {
+  color: #ea580c;
+  font-weight: 600;
+}
+
+.doctor-name-link:hover {
+  text-decoration: underline;
+}

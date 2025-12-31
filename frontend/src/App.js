@@ -4,6 +4,7 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, ScanCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import jsPDF from 'jspdf';
 import './App.css';
 
 // AWS Configuration
@@ -689,8 +690,8 @@ function PatientDashboard() {
         <button className={activeTab === 'procedures' ? 'tab-button active' : 'tab-button'} onClick={() => setActiveTab('procedures')}>Procedures & Surgery</button>
         <button className={activeTab === 'radiology' ? 'tab-button active' : 'tab-button'} onClick={() => setActiveTab('radiology')}>Radiology</button>
         <button className={activeTab === 'family' ? 'tab-button active' : 'tab-button'} onClick={() => setActiveTab('family')}>Social/Family History</button>
+        <button className={activeTab === 'doctors' ? 'tab-button active' : 'tab-button'} onClick={() => setActiveTab('doctors')}>Doctors</button>
         <button className={activeTab === 'summary' ? 'tab-button active' : 'tab-button'} onClick={() => setActiveTab('summary')}>Medical Summary</button>
-        <button className={activeTab === 'status' ? 'tab-button active' : 'tab-button'} onClick={() => setActiveTab('status')}>Processing Status</button>
       </div>
       
       <div className="tab-content">
@@ -701,9 +702,745 @@ function PatientDashboard() {
         {activeTab === 'procedures' && <ProceduresTab procedures={procedures} />}
         {activeTab === 'radiology' && <RadiologyTab radiology={radiology} />}
         {activeTab === 'family' && <FamilyHistoryTab familyHistory={familyHistory} socialHistory={socialHistory} />}
+        {activeTab === 'doctors' && <DoctorsTab diagnoses={diagnoses} medications={medications} procedures={procedures} testResults={testResults} />}
         {activeTab === 'summary' && <MedicalSummaryTab medications={medications} diagnoses={diagnoses} testResults={testResults} patientId={patientId} />}
-        {activeTab === 'status' && <StatusTab patientId={patientId} />}
       </div>
+    </div>
+  );
+}
+
+// Doctors Tab Component
+function DoctorsTab({ diagnoses, medications, procedures, testResults }) {
+  const [doctors, setDoctors] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedDoctor, setSelectedDoctor] = useState(null);
+  const [selectedDoctorInfo, setSelectedDoctorInfo] = useState(null);
+  const [pageImage, setPageImage] = useState(null);
+  const [zoomLevel, setZoomLevel] = useState(1);
+
+  useEffect(() => {
+    extractAndEnrichDoctors();
+  }, [diagnoses, medications, procedures, testResults]);
+
+  const extractAndEnrichDoctors = async () => {
+    try {
+      const doctorMap = new Map();
+
+      // Extract doctors from diagnoses
+      diagnoses.forEach(diag => {
+        const firstName = diag.diagnosing_doctor_first_name;
+        const lastName = diag.diagnosing_doctor_last_name;
+        if (firstName && lastName && firstName !== 'Unknown' && lastName !== 'Unknown') {
+          const key = `${firstName}_${lastName}`;
+          if (!doctorMap.has(key)) {
+            doctorMap.set(key, {
+              first_name: firstName,
+              last_name: lastName,
+              specialty: diag.diagnosing_doctor_specialty || 'Unknown',
+              license_number: diag.diagnosing_doctor_license_number,
+              phone: diag.diagnosing_doctor_phone_number,
+              email: diag.diagnosing_doctor_email,
+              facility_name: diag.diagnosing_facility_name,
+              facility_address_line1: diag.diagnosing_facility_address_line1,
+              facility_address_line2: diag.diagnosing_facility_address_line2,
+              facility_city: diag.diagnosing_facility_city,
+              facility_state: diag.diagnosing_facility_state,
+              facility_postal_code: diag.diagnosing_facility_postal_code,
+              facility_phone: diag.diagnosing_facility_phone_number,
+              facility_email: diag.diagnosing_facility_email,
+              page_ids: new Set(),
+              diagnoses: [],
+              medications: [],
+              procedures: [],
+              tests: []
+            });
+          }
+          const doctor = doctorMap.get(key);
+          if (diag.page_id) doctor.page_ids.add(diag.page_id);
+          doctor.diagnoses.push({
+            description: diag.diagnosis_description,
+            code: diag.diagnosis_code,
+            date: diag.diagnosed_date,
+            page_id: diag.page_id
+          });
+        }
+      });
+
+      // Extract doctors from medications
+      medications.forEach(med => {
+        const prescribingDoctor = med.prescribing_doctor || '';
+        const parts = prescribingDoctor.split(' ');
+        if (parts.length >= 2) {
+          const firstName = parts[0];
+          const lastName = parts.slice(1).join(' ');
+          const key = `${firstName}_${lastName}`;
+          if (!doctorMap.has(key)) {
+            doctorMap.set(key, {
+              first_name: firstName,
+              last_name: lastName,
+              specialty: 'Unknown',
+              page_ids: new Set(),
+              diagnoses: [],
+              medications: [],
+              procedures: [],
+              tests: []
+            });
+          }
+          const doctor = doctorMap.get(key);
+          if (med.page_id) doctor.page_ids.add(med.page_id);
+          doctor.medications.push({
+            name: med.medication_name || med.name,
+            dosage: med.dosage,
+            start_date: med.start_date,
+            page_id: med.page_id
+          });
+        }
+      });
+
+      // Extract doctors from procedures
+      procedures.forEach(proc => {
+        const firstName = proc.performing_doctor_first_name;
+        const lastName = proc.performing_doctor_last_name;
+        if (firstName && lastName && firstName !== 'Unknown' && lastName !== 'Unknown') {
+          const key = `${firstName}_${lastName}`;
+          if (!doctorMap.has(key)) {
+            doctorMap.set(key, {
+              first_name: firstName,
+              last_name: lastName,
+              specialty: proc.performing_doctor_specialty || 'Unknown',
+              page_ids: new Set(),
+              diagnoses: [],
+              medications: [],
+              procedures: [],
+              tests: []
+            });
+          }
+          const doctor = doctorMap.get(key);
+          if (proc.page_id) doctor.page_ids.add(proc.page_id);
+          doctor.procedures.push({
+            name: proc.procedure_name,
+            date: proc.procedure_date,
+            code: proc.procedure_code,
+            page_id: proc.page_id
+          });
+        }
+      });
+
+      // Extract doctors from test results
+      testResults.forEach(test => {
+        const orderingDoctor = test.ordering_doctor || '';
+        const parts = orderingDoctor.split(' ');
+        if (parts.length >= 2) {
+          const firstName = parts[0];
+          const lastName = parts.slice(1).join(' ');
+          const key = `${firstName}_${lastName}`;
+          if (!doctorMap.has(key)) {
+            doctorMap.set(key, {
+              first_name: firstName,
+              last_name: lastName,
+              specialty: 'Unknown',
+              page_ids: new Set(),
+              diagnoses: [],
+              medications: [],
+              procedures: [],
+              tests: []
+            });
+          }
+          const doctor = doctorMap.get(key);
+          if (test.page_id) doctor.page_ids.add(test.page_id);
+          doctor.tests.push({
+            name: test.test_name || test.name,
+            date: test.test_date || test.date,
+            page_id: test.page_id
+          });
+        }
+      });
+
+      // Query NPI database for each doctor
+      const enrichedDoctors = await Promise.all(
+        Array.from(doctorMap.values()).map(async (doctor) => {
+          try {
+            // Query NPI table - try exact match first, then fuzzy
+            let npiRes = await docClient.send(new ScanCommand({
+              TableName: 'HealthAI-NPI',
+              FilterExpression: '#fn = :fname AND #ln = :lname',
+              ExpressionAttributeNames: {
+                '#fn': 'first_name',
+                '#ln': 'last_name'
+              },
+              ExpressionAttributeValues: {
+                ':fname': doctor.first_name,
+                ':lname': doctor.last_name
+              },
+              Limit: 5
+            }));
+
+            // If no exact match, try fuzzy matching
+            if (!npiRes.Items || npiRes.Items.length === 0) {
+              npiRes = await docClient.send(new ScanCommand({
+                TableName: 'HealthAI-NPI',
+                FilterExpression: 'contains(#fn, :fname) AND contains(#ln, :lname)',
+                ExpressionAttributeNames: {
+                  '#fn': 'first_name',
+                  '#ln': 'last_name'
+                },
+                ExpressionAttributeValues: {
+                  ':fname': doctor.first_name,
+                  ':lname': doctor.last_name
+                },
+                Limit: 5
+              }));
+            }
+
+            const npiData = npiRes.Items?.[0];
+            if (npiData) {
+              // Enrich with comprehensive NPI data
+              const enrichedDoctor = {
+                ...doctor,
+                npi_number: npiData.npi_number,
+                npi_specialty: npiData.primary_taxonomy_description,
+                npi_secondary_specialty: npiData.secondary_taxonomy_description,
+                npi_verified: true,
+                npi_match_type: npiRes.Items.length === 1 ? 'exact' : 'fuzzy',
+                specialty_match: checkSpecialtyMatch(doctor.specialty, npiData.primary_taxonomy_description, doctor.diagnoses)
+              };
+
+              // Add NPI address if available and not already set
+              if (npiData.primary_practice_address_line1) {
+                enrichedDoctor.npi_address_line1 = npiData.primary_practice_address_line1;
+                enrichedDoctor.npi_address_line2 = npiData.primary_practice_address_line2;
+                enrichedDoctor.npi_city = npiData.primary_practice_address_city;
+                enrichedDoctor.npi_state = npiData.primary_practice_address_state;
+                enrichedDoctor.npi_postal_code = npiData.primary_practice_address_postal_code;
+              }
+
+              // Add NPI phone if not already set
+              if (npiData.phone_number && !enrichedDoctor.phone) {
+                enrichedDoctor.npi_phone = npiData.phone_number;
+              }
+
+              // Add organization name if available
+              if (npiData.organization_name) {
+                enrichedDoctor.npi_organization = npiData.organization_name;
+              }
+
+              // Add credentials
+              if (npiData.credentials) {
+                enrichedDoctor.npi_credentials = npiData.credentials;
+              }
+
+              // Add other identifiers
+              if (npiData.other_identifiers) {
+                enrichedDoctor.npi_other_identifiers = npiData.other_identifiers;
+              }
+
+              return enrichedDoctor;
+            }
+            return { ...doctor, npi_verified: false, specialty_match: 'Unverified' };
+          } catch (error) {
+            console.error(`Error fetching NPI data for Dr. ${doctor.first_name} ${doctor.last_name}:`, error);
+            return { ...doctor, npi_verified: false, specialty_match: 'Unverified' };
+          }
+        })
+      );
+
+      setDoctors(enrichedDoctors.sort((a, b) => 
+        `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`)
+      ));
+    } catch (error) {
+      console.error('Error extracting doctors:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkSpecialtyMatch = (docSpecialty, npiSpecialty, diagnoses) => {
+    if (!npiSpecialty || npiSpecialty === 'Unknown') return 'Unknown';
+    if (!docSpecialty || docSpecialty === 'Unknown') return 'Unverified';
+
+    const specialty = npiSpecialty.toLowerCase();
+    const docSpec = docSpecialty.toLowerCase();
+
+    // Get diagnosis types to check if doctor is treating appropriate conditions
+    const diagnosisTypes = diagnoses.map(d => (d.description || '').toLowerCase()).join(' ');
+
+    // Check if NPI specialty matches document specialty
+    if (specialty.includes(docSpec) || docSpec.includes(specialty)) {
+      return 'Verified Match';
+    }
+
+    // Check common specialty matches
+    const specialtyMatches = {
+      'oncology': ['cancer', 'malignancy', 'carcinoma', 'oncology'],
+      'cardiology': ['heart', 'cardiac', 'cardiovascular'],
+      'urology': ['prostate', 'bladder', 'urinary', 'kidney'],
+      'endocrinology': ['diabetes', 'thyroid', 'metabolic'],
+      'orthopedic': ['joint', 'bone', 'spine', 'musculoskeletal']
+    };
+
+    for (const [spec, keywords] of Object.entries(specialtyMatches)) {
+      if (specialty.includes(spec) && keywords.some(kw => diagnosisTypes.includes(kw))) {
+        return 'Appropriate';
+      }
+    }
+
+    return 'Review Recommended';
+  };
+
+  const viewDoctorDetails = async (doctor) => {
+    setSelectedDoctor(doctor);
+    
+    // Load page image for the first page where this doctor appears
+    if (doctor.page_ids && doctor.page_ids.size > 0) {
+      const firstPageId = Array.from(doctor.page_ids)[0];
+      await loadPageImage(firstPageId);
+    }
+  };
+
+  const viewDoctorInfo = (doctor) => {
+    setSelectedDoctorInfo(doctor);
+  };
+
+  const closeDetails = () => {
+    setSelectedDoctor(null);
+    setPageImage(null);
+    setZoomLevel(1);
+  };
+
+  const closeDoctorInfo = () => {
+    setSelectedDoctorInfo(null);
+  };
+
+  const loadPageImage = async (pageId) => {
+    try {
+      const pageRes = await docClient.send(new ScanCommand({
+        TableName: 'HealthAI-Pages',
+        FilterExpression: 'page_id = :pageId',
+        ExpressionAttributeValues: { ':pageId': pageId }
+      }));
+      
+      const page = pageRes.Items?.[0];
+      if (page && page.webp_s3_key) {
+        const command = new GetObjectCommand({
+          Bucket: S3_BUCKET,
+          Key: page.webp_s3_key
+        });
+        const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+        setPageImage({ url, page_number: page.page_number });
+      }
+    } catch (error) {
+      console.error('Error loading page image:', error);
+    }
+  };
+
+  const handleZoomIn = () => {
+    setZoomLevel(prev => Math.min(prev + 0.5, 3));
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel(prev => Math.max(prev - 0.5, 0.5));
+  };
+
+  if (loading) return <div className="loading">Analyzing doctor information...</div>;
+
+  return (
+    <div className="doctors-content">
+      <h2>Healthcare Providers</h2>
+      <p className="diagnosis-summary">
+        {doctors.length} provider{doctors.length !== 1 ? 's' : ''} identified from patient records
+      </p>
+
+      {doctors.length > 0 ? (
+        <div className="doctors-table-container">
+          <table className="medical-table">
+            <thead>
+              <tr>
+                <th>Doctor Name</th>
+                <th>Specialty (Records)</th>
+                <th>NPI Specialty</th>
+                <th>Match Status</th>
+                <th>Diagnoses</th>
+                <th>Medications</th>
+                <th>Procedures</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {doctors.map((doctor, idx) => (
+                <tr key={idx}>
+                  <td>
+                    <strong 
+                      className="doctor-name-link"
+                      onClick={() => viewDoctorInfo(doctor)}
+                      style={{ cursor: 'pointer', color: 'var(--primary-color)' }}
+                    >
+                      Dr. {doctor.first_name} {doctor.last_name}
+                      {doctor.npi_credentials && ` ${doctor.npi_credentials}`}
+                    </strong>
+                    {doctor.npi_number && (
+                      <div style={{ fontSize: '0.85em', color: '#666', marginTop: '0.25rem' }}>
+                        NPI: {doctor.npi_number}
+                        {doctor.npi_match_type === 'exact' && (
+                          <span style={{ color: '#16a34a', marginLeft: '0.5rem' }}>✓ Verified</span>
+                        )}
+                      </div>
+                    )}
+                    {!doctor.npi_verified && (
+                      <div style={{ fontSize: '0.85em', color: '#dc2626', marginTop: '0.25rem' }}>
+                        ⚠️ Not in NPI Database
+                      </div>
+                    )}
+                  </td>
+                  <td>
+                    {doctor.specialty}
+                    {doctor.specialty !== 'Unknown' && doctor.npi_specialty && doctor.specialty_match === 'Verified Match' && (
+                      <div style={{ fontSize: '0.75em', color: '#16a34a', marginTop: '0.25rem' }}>
+                        ✓ Matches NPI
+                      </div>
+                    )}
+                  </td>
+                  <td>
+                    {doctor.npi_specialty || <span style={{ color: '#999' }}>Not found</span>}
+                    {doctor.npi_secondary_specialty && (
+                      <div style={{ fontSize: '0.85em', color: '#666', marginTop: '0.25rem' }}>
+                        Secondary: {doctor.npi_secondary_specialty}
+                      </div>
+                    )}
+                  </td>
+                  <td>
+                    <span className={`specialty-match-badge ${doctor.specialty_match?.toLowerCase().replace(/ /g, '-')}`}>
+                      {doctor.npi_verified ? doctor.specialty_match : 'Not Verified'}
+                    </span>
+                  </td>
+                  <td className="centered">{doctor.diagnoses.length}</td>
+                  <td className="centered">{doctor.medications.length}</td>
+                  <td className="centered">{doctor.procedures.length}</td>
+                  <td>
+                    <button
+                      className="view-details-btn-small"
+                      onClick={() => viewDoctorDetails(doctor)}
+                    >
+                      View Details
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="no-data-message">No doctors found in patient records</div>
+      )}
+
+      {/* Doctor Info Modal - Quick view of contact details */}
+      {selectedDoctorInfo && (
+        <div className="diagnosis-detail-modal" onClick={closeDoctorInfo}>
+          <div className="diagnosis-detail-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+            <div className="modal-header">
+              <h2>Dr. {selectedDoctorInfo.first_name} {selectedDoctorInfo.last_name}</h2>
+              <button onClick={closeDoctorInfo} className="close-btn">✕ Close</button>
+            </div>
+
+            <div className="diagnosis-detail-body">
+              {selectedDoctorInfo.npi_verified && (
+                <div className="diagnosis-summary-section npi-verification-section">
+                  <h3>✅ NPI Verification Status</h3>
+                  <div className="doctor-contact-info">
+                    <div className="contact-item">
+                      <strong>Match Type:</strong>
+                      <span className={selectedDoctorInfo.npi_match_type === 'exact' ? 'text-success' : 'text-warning'}>
+                        {selectedDoctorInfo.npi_match_type === 'exact' ? '🎯 Exact Match' : '🔍 Fuzzy Match'}
+                      </span>
+                    </div>
+                    <div className="contact-item">
+                      <strong>Verification:</strong>
+                      <span className={`specialty-match-badge ${selectedDoctorInfo.specialty_match?.toLowerCase().replace(/ /g, '-')}`}>
+                        {selectedDoctorInfo.specialty_match}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="diagnosis-summary-section">
+                <h3>Professional Information</h3>
+                <div className="doctor-contact-info">
+                  {selectedDoctorInfo.specialty && selectedDoctorInfo.specialty !== 'Unknown' && (
+                    <div className="contact-item">
+                      <strong>🩺 Specialty (Records):</strong>
+                      <span>{selectedDoctorInfo.specialty}</span>
+                    </div>
+                  )}
+                  {selectedDoctorInfo.npi_specialty && (
+                    <div className="contact-item">
+                      <strong>🩺 NPI Primary Specialty:</strong>
+                      <span>{selectedDoctorInfo.npi_specialty}</span>
+                    </div>
+                  )}
+                  {selectedDoctorInfo.npi_secondary_specialty && (
+                    <div className="contact-item">
+                      <strong>🩺 NPI Secondary Specialty:</strong>
+                      <span>{selectedDoctorInfo.npi_secondary_specialty}</span>
+                    </div>
+                  )}
+                  {selectedDoctorInfo.npi_credentials && (
+                    <div className="contact-item">
+                      <strong>🎓 Credentials:</strong>
+                      <span>{selectedDoctorInfo.npi_credentials}</span>
+                    </div>
+                  )}
+                  {selectedDoctorInfo.license_number && (
+                    <div className="contact-item">
+                      <strong>📄 License Number:</strong>
+                      <span>{selectedDoctorInfo.license_number}</span>
+                    </div>
+                  )}
+                  {selectedDoctorInfo.npi_number && (
+                    <div className="contact-item">
+                      <strong>🆔 NPI Number:</strong>
+                      <span>{selectedDoctorInfo.npi_number}</span>
+                    </div>
+                  )}
+                  {selectedDoctorInfo.npi_organization && (
+                    <div className="contact-item">
+                      <strong>🏢 Organization:</strong>
+                      <span>{selectedDoctorInfo.npi_organization}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="diagnosis-summary-section">
+                <h3>Contact Information</h3>
+                <div className="doctor-contact-info">
+                  {selectedDoctorInfo.phone && (
+                    <div className="contact-item">
+                      <strong>📞 Phone (Records):</strong>
+                      <span>{selectedDoctorInfo.phone}</span>
+                    </div>
+                  )}
+                  {selectedDoctorInfo.npi_phone && (
+                    <div className="contact-item">
+                      <strong>📞 Phone (NPI):</strong>
+                      <span>{selectedDoctorInfo.npi_phone}</span>
+                    </div>
+                  )}
+                  {selectedDoctorInfo.email && (
+                    <div className="contact-item">
+                      <strong>📧 Email:</strong>
+                      <span>{selectedDoctorInfo.email}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {(selectedDoctorInfo.npi_address_line1 || selectedDoctorInfo.facility_name) && (
+                <div className="diagnosis-summary-section">
+                  <h3>Practice Location</h3>
+                  <div className="doctor-contact-info">
+                    {selectedDoctorInfo.npi_address_line1 && (
+                      <div className="contact-item">
+                        <strong>📍 NPI Practice Address:</strong>
+                        <span>
+                          {selectedDoctorInfo.npi_address_line1}
+                          {selectedDoctorInfo.npi_address_line2 && <><br />{selectedDoctorInfo.npi_address_line2}</>}
+                          <br />
+                          {selectedDoctorInfo.npi_city && `${selectedDoctorInfo.npi_city}, `}
+                          {selectedDoctorInfo.npi_state} {selectedDoctorInfo.npi_postal_code}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="diagnosis-summary-section">
+                <h3>Patient Activity</h3>
+                <div className="doctor-contact-info">
+                  <div className="contact-item">
+                    <strong>📋 Diagnoses:</strong>
+                    <span>{selectedDoctorInfo.diagnoses.length} diagnosis(es)</span>
+                  </div>
+                  <div className="contact-item">
+                    <strong>💊 Medications:</strong>
+                    <span>{selectedDoctorInfo.medications.length} prescription(s)</span>
+                  </div>
+                  <div className="contact-item">
+                    <strong>🏥 Procedures:</strong>
+                    <span>{selectedDoctorInfo.procedures.length} procedure(s)</span>
+                  </div>
+                  {selectedDoctorInfo.tests && (
+                    <div className="contact-item">
+                      <strong>🧪 Tests:</strong>
+                      <span>{selectedDoctorInfo.tests.length} test(s)</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {selectedDoctorInfo.facility_name && (
+                <div className="diagnosis-summary-section">
+                  <h3>Facility Information</h3>
+                  <div className="doctor-contact-info">
+                    <div className="contact-item">
+                      <strong>🏥 Facility:</strong>
+                      <span>{selectedDoctorInfo.facility_name}</span>
+                    </div>
+                    {selectedDoctorInfo.facility_address_line1 && (
+                      <div className="contact-item">
+                        <strong>📍 Address:</strong>
+                        <span>
+                          {selectedDoctorInfo.facility_address_line1}
+                          {selectedDoctorInfo.facility_address_line2 && <br />}
+                          {selectedDoctorInfo.facility_address_line2}
+                          {(selectedDoctorInfo.facility_city || selectedDoctorInfo.facility_state) && <br />}
+                          {selectedDoctorInfo.facility_city && `${selectedDoctorInfo.facility_city}, `}
+                          {selectedDoctorInfo.facility_state} {selectedDoctorInfo.facility_postal_code}
+                        </span>
+                      </div>
+                    )}
+                    {selectedDoctorInfo.facility_phone && (
+                      <div className="contact-item">
+                        <strong>📞 Facility Phone:</strong>
+                        <span>{selectedDoctorInfo.facility_phone}</span>
+                      </div>
+                    )}
+                    {selectedDoctorInfo.facility_email && (
+                      <div className="contact-item">
+                        <strong>📧 Facility Email:</strong>
+                        <span>{selectedDoctorInfo.facility_email}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <button 
+                className="view-details-btn"
+                onClick={() => {
+                  closeDoctorInfo();
+                  viewDoctorDetails(selectedDoctorInfo);
+                }}
+                style={{ marginTop: '1rem' }}
+              >
+                View Full Details & Source Documents
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Doctor Details Modal with Page Viewer */}
+      {selectedDoctor && (
+        <div className="diagnosis-detail-modal" onClick={closeDetails}>
+          <div className="diagnosis-detail-content doctor-details-wide" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Dr. {selectedDoctor.first_name} {selectedDoctor.last_name}</h2>
+              <button onClick={closeDetails} className="close-btn">✕ Close</button>
+            </div>
+
+            <div className="doctor-details-container">
+              {/* Left side - Page viewer */}
+              {pageImage && (
+                <div className="page-viewer-section">
+                  <h3>📄 Source Document - Page {pageImage.page_number}</h3>
+                  <div className="zoom-controls-inline">
+                    <button onClick={handleZoomOut}>🔍 -</button>
+                    <span>{Math.round(zoomLevel * 100)}%</span>
+                    <button onClick={handleZoomIn}>🔍 +</button>
+                  </div>
+                  <div className="page-image-container">
+                    <img 
+                      src={pageImage.url} 
+                      alt={`Page ${pageImage.page_number}`}
+                      style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top left' }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Right side - Doctor information */}
+              <div className="doctor-info-section">
+                <div className="diagnosis-summary-section">
+                  <h3>Provider Information</h3>
+                  <div className="diagnosis-metadata">
+                    <div className="metadata-item">
+                      <strong>Record Specialty:</strong>
+                      <span>{selectedDoctor.specialty}</span>
+                    </div>
+                    {selectedDoctor.npi_number && (
+                      <>
+                        <div className="metadata-item">
+                          <strong>NPI Number:</strong>
+                          <span>{selectedDoctor.npi_number}</span>
+                        </div>
+                        <div className="metadata-item">
+                          <strong>NPI Specialty:</strong>
+                          <span>{selectedDoctor.npi_specialty}</span>
+                        </div>
+                        <div className="metadata-item">
+                          <strong>Verification Status:</strong>
+                          <span className={`specialty-match-badge ${selectedDoctor.specialty_match?.toLowerCase().replace(/ /g, '-')}`}>
+                            {selectedDoctor.specialty_match}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                    {selectedDoctor.facility_name && (
+                      <div className="metadata-item">
+                        <strong>Facility:</strong>
+                        <span>{selectedDoctor.facility_name}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {selectedDoctor.diagnoses.length > 0 && (
+                  <div className="diagnosis-history-section">
+                    <h3>Diagnoses ({selectedDoctor.diagnoses.length})</h3>
+                    <div className="scrollable-list">
+                      {selectedDoctor.diagnoses.map((diag, idx) => (
+                        <div key={idx} className="history-entry">
+                          <p><strong>{diag.description}</strong> {diag.code && `(${diag.code})`}</p>
+                          {diag.date && <p style={{ fontSize: '0.9em', color: '#666' }}>Date: {diag.date}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedDoctor.medications.length > 0 && (
+                  <div className="diagnosis-history-section">
+                    <h3>Medications Prescribed ({selectedDoctor.medications.length})</h3>
+                    <div className="scrollable-list">
+                      {selectedDoctor.medications.map((med, idx) => (
+                        <div key={idx} className="history-entry">
+                          <p><strong>{med.name}</strong> {med.dosage && `- ${med.dosage}`}</p>
+                          {med.start_date && <p style={{ fontSize: '0.9em', color: '#666' }}>Started: {med.start_date}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedDoctor.procedures.length > 0 && (
+                  <div className="diagnosis-history-section">
+                    <h3>Procedures Performed ({selectedDoctor.procedures.length})</h3>
+                    <div className="scrollable-list">
+                      {selectedDoctor.procedures.map((proc, idx) => (
+                        <div key={idx} className="history-entry">
+                          <p><strong>{proc.name}</strong> {proc.code && `(${proc.code})`}</p>
+                          {proc.date && <p style={{ fontSize: '0.9em', color: '#666' }}>Date: {proc.date}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -810,6 +1547,222 @@ function DiagnosisTab({ diagnoses }) {
   const [selectedDiagnosis, setSelectedDiagnosis] = useState(null);
   const [diagnosisHistory, setDiagnosisHistory] = useState([]);
 
+  const downloadDiagnosisPDF = () => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 20;
+    let yPosition = margin;
+
+    // Title
+    doc.setFontSize(20);
+    doc.setFont(undefined, 'bold');
+    doc.text('Diagnosis Report', pageWidth / 2, yPosition, { align: 'center' });
+    yPosition += 15;
+
+    // Date
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+    doc.text(`Generated: ${new Date().toLocaleDateString()}`, pageWidth / 2, yPosition, { align: 'center' });
+    yPosition += 10;
+
+    // Summary
+    doc.setFontSize(12);
+    doc.text(`Total Diagnoses: ${diagnoses.length}`, margin, yPosition);
+    yPosition += 10;
+
+    // Group diagnoses
+    const groupedDiagnoses = groupDiagnoses(diagnoses);
+    
+    Object.entries(groupedDiagnoses).forEach(([groupName, groupDiagnoses]) => {
+      // Check if we need a new page
+      if (yPosition > pageHeight - 40) {
+        doc.addPage();
+        yPosition = margin;
+      }
+
+      // Group header
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.text(`${groupName} (${groupDiagnoses.length})`, margin, yPosition);
+      yPosition += 8;
+
+      // Group diagnoses
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      
+      groupDiagnoses.forEach((diagnosis, idx) => {
+        if (yPosition > pageHeight - 30) {
+          doc.addPage();
+          yPosition = margin;
+        }
+
+        const diagDesc = diagnosis.diagnosis_description || 'Unknown';
+        const occurrenceCount = diagnoses.filter(d => d.diagnosis_description === diagDesc).length;
+        
+        doc.text(`• ${diagDesc}`, margin + 5, yPosition);
+        yPosition += 5;
+        doc.setFontSize(9);
+        doc.text(`  Code: ${diagnosis.diagnosis_code || 'N/A'}`, margin + 7, yPosition);
+        yPosition += 4;
+        doc.text(`  First diagnosed: ${diagnosis.diagnosed_date || 'Unknown'}`, margin + 7, yPosition);
+        yPosition += 4;
+        doc.text(`  Visits: ${occurrenceCount}`, margin + 7, yPosition);
+        yPosition += 4;
+        
+        if (diagnosis.diagnosing_doctor_first_name && diagnosis.diagnosing_doctor_last_name) {
+          doc.text(`  Doctor: Dr. ${diagnosis.diagnosing_doctor_first_name} ${diagnosis.diagnosing_doctor_last_name}`, margin + 7, yPosition);
+          yPosition += 4;
+        }
+        
+        if (diagnosis.summary || diagnosis.notes) {
+          const summaryText = diagnosis.summary || diagnosis.notes;
+          const splitText = doc.splitTextToSize(summaryText, pageWidth - margin * 2 - 10);
+          splitText.forEach(line => {
+            if (yPosition > pageHeight - 20) {
+              doc.addPage();
+              yPosition = margin;
+            }
+            doc.text(`  ${line}`, margin + 7, yPosition);
+            yPosition += 4;
+          });
+        }
+        
+        yPosition += 3;
+        doc.setFontSize(10);
+      });
+      
+      yPosition += 5;
+    });
+
+    // Save the PDF
+    doc.save('diagnosis-report.pdf');
+  };
+
+  const emailToBroker = () => {
+    try {
+      // First, generate and download the PDF
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 20;
+      let yPosition = margin;
+
+      // Title
+      doc.setFontSize(20);
+      doc.setFont(undefined, 'bold');
+      doc.text('Diagnosis Report', pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 15;
+
+      // Date
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Generated: ${new Date().toLocaleDateString()}`, pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 10;
+
+      // Summary
+      doc.setFontSize(12);
+      doc.text(`Total Diagnoses: ${diagnoses.length}`, margin, yPosition);
+      yPosition += 10;
+
+      // Group diagnoses
+      const groupedDiagnoses = groupDiagnoses(diagnoses);
+      
+      Object.entries(groupedDiagnoses).forEach(([groupName, groupDiagnoses]) => {
+        if (yPosition > pageHeight - 40) {
+          doc.addPage();
+          yPosition = margin;
+        }
+
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.text(`${groupName} (${groupDiagnoses.length})`, margin, yPosition);
+        yPosition += 8;
+
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        
+        groupDiagnoses.forEach((diagnosis) => {
+          if (yPosition > pageHeight - 30) {
+            doc.addPage();
+            yPosition = margin;
+          }
+
+          const diagDesc = diagnosis.diagnosis_description || 'Unknown';
+          const occurrenceCount = diagnoses.filter(d => d.diagnosis_description === diagDesc).length;
+          
+          doc.text(`\u2022 ${diagDesc}`, margin + 5, yPosition);
+          yPosition += 5;
+          doc.setFontSize(9);
+          doc.text(`  Code: ${diagnosis.diagnosis_code || 'N/A'}`, margin + 7, yPosition);
+          yPosition += 4;
+          doc.text(`  First diagnosed: ${diagnosis.diagnosed_date || 'Unknown'}`, margin + 7, yPosition);
+          yPosition += 4;
+          doc.text(`  Visits: ${occurrenceCount}`, margin + 7, yPosition);
+          yPosition += 4;
+          
+          if (diagnosis.diagnosing_doctor_first_name && diagnosis.diagnosing_doctor_last_name) {
+            doc.text(`  Doctor: Dr. ${diagnosis.diagnosing_doctor_first_name} ${diagnosis.diagnosing_doctor_last_name}`, margin + 7, yPosition);
+            yPosition += 4;
+          }
+          
+          if (diagnosis.summary || diagnosis.notes) {
+            const summaryText = diagnosis.summary || diagnosis.notes;
+            const splitText = doc.splitTextToSize(summaryText, pageWidth - margin * 2 - 10);
+            splitText.forEach(line => {
+              if (yPosition > pageHeight - 20) {
+                doc.addPage();
+                yPosition = margin;
+              }
+              doc.text(`  ${line}`, margin + 7, yPosition);
+              yPosition += 4;
+            });
+          }
+          
+          yPosition += 3;
+          doc.setFontSize(10);
+        });
+        
+        yPosition += 5;
+      });
+
+      // Save the PDF
+      const fileName = `diagnosis-report-${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(fileName);
+
+      // Prepare email summary
+      let emailBody = `Please find attached the Patient Diagnosis Report.\n\n`;
+      emailBody += `REPORT SUMMARY:\n`;
+      emailBody += `- Total Diagnoses: ${diagnoses.length}\n`;
+      emailBody += `- Report Date: ${new Date().toLocaleDateString()}\n`;
+      emailBody += `- Attachment: ${fileName}\n\n`;
+      
+      emailBody += `The PDF report has been downloaded to your computer. Please attach it to this email before sending.\n\n`;
+      
+      emailBody += `Categories included:\n`;
+      Object.entries(groupedDiagnoses).forEach(([groupName, groupDiagnoses]) => {
+        emailBody += `- ${groupName}: ${groupDiagnoses.length} diagnosis(es)\n`;
+      });
+
+      // Create mailto link
+      const subject = encodeURIComponent('Patient Diagnosis Report - ' + new Date().toLocaleDateString());
+      const body = encodeURIComponent(emailBody);
+      const mailtoLink = `mailto:?subject=${subject}&body=${body}`;
+      
+      console.log('PDF downloaded, opening email client...');
+      
+      // Open email client after a short delay to ensure PDF download completes
+      setTimeout(() => {
+        window.location.href = mailtoLink;
+        alert('The diagnosis report PDF has been downloaded. Please attach it to the email that is now opening.');
+      }, 1000);
+      
+    } catch (error) {
+      console.error('Error creating email:', error);
+      alert('Failed to prepare email. Error: ' + error.message);
+    }
+  };
+
   const viewDiagnosisPage = async (diagnosis) => {
     if (!diagnosis.page_id) {
       alert('No page information available for this diagnosis');
@@ -895,79 +1848,92 @@ function DiagnosisTab({ diagnoses }) {
     setZoomLevel(prev => Math.max(prev - 0.5, 0.5));
   };
 
-  // Group diagnoses by similar conditions
+  // Group diagnoses by medical specialty (matching legacy system)
   const groupDiagnoses = (diagList) => {
     const groups = {};
     
+    // First, consolidate duplicate diagnoses with same description
+    const consolidatedDiagnoses = new Map();
+    
     diagList.forEach(diag => {
-      const desc = diag.diagnosis_description || 'Unknown';
+      const key = diag.diagnosis_description || 'Unknown';
+      if (!consolidatedDiagnoses.has(key)) {
+        consolidatedDiagnoses.set(key, {
+          ...diag,
+          occurrences: [],
+          allSummaries: [],
+          allNotes: [],
+          allDates: [],
+          allCodes: new Set(),
+          allDoctors: new Set()
+        });
+      }
       
-      // Define grouping keywords - group by primary condition
-      let groupKey = 'Other Conditions';
+      const consolidated = consolidatedDiagnoses.get(key);
+      consolidated.occurrences.push(diag);
+      if (diag.summary) consolidated.allSummaries.push(diag.summary);
+      if (diag.notes) consolidated.allNotes.push(diag.notes);
+      if (diag.diagnosed_date) consolidated.allDates.push(diag.diagnosed_date);
+      if (diag.diagnosis_code) consolidated.allCodes.add(diag.diagnosis_code);
+      if (diag.diagnosing_doctor_first_name && diag.diagnosing_doctor_last_name) {
+        consolidated.allDoctors.add(`Dr. ${diag.diagnosing_doctor_first_name} ${diag.diagnosing_doctor_last_name}`);
+      }
+    });
+    
+    // Now group by specialty
+    consolidatedDiagnoses.forEach((diag, key) => {
+      const desc = (diag.diagnosis_description || 'Unknown').toLowerCase();
+      const combined = desc + ' ' + diag.allSummaries.join(' ').toLowerCase() + ' ' + diag.allNotes.join(' ').toLowerCase();
+      let groupKey = 'Other Medical Conditions';
       
-      // Prostate Cancer related
-      if (desc.toLowerCase().includes('prostate') && 
-          (desc.toLowerCase().includes('cancer') || desc.toLowerCase().includes('adenocarcinoma') || 
-           desc.toLowerCase().includes('carcinoma') || desc.toLowerCase().includes('malign') ||
-           desc.toLowerCase().includes('gleason') || desc.toLowerCase().includes('metastatic'))) {
-        groupKey = 'Prostate Cancer & Related';
+      // Major Cancer & Oncology - All malignancies
+      if ((combined.includes('cancer') || combined.includes('carcinoma') || 
+           combined.includes('adenocarcinoma') || combined.includes('malign') ||
+           combined.includes('neoplasm') || combined.includes('metastatic') ||
+           combined.includes('oncology') || combined.includes('gleason') ||
+           combined.includes('tumor')) && !combined.includes('benign')) {
+        groupKey = 'Cancer & Oncology';
       }
-      // Diabetes
-      else if (desc.toLowerCase().includes('diabetes') || desc.toLowerCase().includes('diabetic')) {
-        groupKey = 'Diabetes Mellitus';
+      // Chronic Conditions - Diabetes, Hypertension, Heart Disease, Kidney Disease
+      else if (combined.includes('diabetes') || combined.includes('diabetic') ||
+               combined.includes('hypertension') || combined.includes('blood pressure') ||
+               combined.includes('heart') || combined.includes('cardiac') ||
+               combined.includes('coronary') || combined.includes('atherosclerotic') ||
+               combined.includes('cardiovascular') || combined.includes('myocardial') ||
+               combined.includes('kidney') || combined.includes('renal') ||
+               combined.includes('nephro') || combined.includes('lipid') || 
+               combined.includes('cholesterol') || combined.includes('hyperlipidemia') ||
+               combined.includes('obesity') || combined.includes('obese') ||
+               combined.includes('ckd') || combined.includes('egfr')) {
+        groupKey = 'Chronic Conditions (Diabetes, Heart, Kidney)';
       }
-      // Cardiovascular
-      else if (desc.toLowerCase().includes('heart') || desc.toLowerCase().includes('cardiac') || 
-               desc.toLowerCase().includes('coronary') || desc.toLowerCase().includes('atherosclerotic')) {
-        groupKey = 'Cardiovascular';
-      }
-      // Erectile dysfunction
-      else if (desc.toLowerCase().includes('erectile')) {
-        groupKey = 'Erectile Dysfunction';
-      }
-      // Hypertension
-      else if (desc.toLowerCase().includes('hypertension') || desc.toLowerCase().includes('blood pressure')) {
-        groupKey = 'Hypertension';
-      }
-      // Hyperlipidemia/Cholesterol
-      else if (desc.toLowerCase().includes('lipid') || desc.toLowerCase().includes('cholesterol') || 
-               desc.toLowerCase().includes('triglyceride')) {
-        groupKey = 'Lipid Disorders';
-      }
-      // Benign prostate conditions
-      else if (desc.toLowerCase().includes('prostate') && desc.toLowerCase().includes('benign')) {
-        groupKey = 'Benign Prostate';
-      }
-      // Bladder/Urinary
-      else if (desc.toLowerCase().includes('bladder') || desc.toLowerCase().includes('urinary') || 
-               desc.toLowerCase().includes('nocturia') || desc.toLowerCase().includes('dysuria')) {
-        groupKey = 'Bladder & Urinary';
-      }
-      // Musculoskeletal
-      else if (desc.toLowerCase().includes('joint') || desc.toLowerCase().includes('spine') || 
-               desc.toLowerCase().includes('degenerative') || desc.toLowerCase().includes('knee') ||
-               desc.toLowerCase().includes('hip')) {
-        groupKey = 'Musculoskeletal';
-      }
-      // Mental Health
-      else if (desc.toLowerCase().includes('anxiety') || desc.toLowerCase().includes('depression') || 
-               desc.toLowerCase().includes('sleep')) {
-        groupKey = 'Mental Health';
-      }
-      // Gastrointestinal
-      else if (desc.toLowerCase().includes('gallbladder') || desc.toLowerCase().includes('cholelithiasis') || 
-               desc.toLowerCase().includes('diverticulosis')) {
-        groupKey = 'Gastrointestinal';
-      }
-      // Obesity
-      else if (desc.toLowerCase().includes('obesity') || desc.toLowerCase().includes('obese')) {
-        groupKey = 'Obesity';
+      // Acute & Specialty Care - Everything else
+      else {
+        groupKey = 'Acute & Specialty Care';
       }
       
       if (!groups[groupKey]) {
         groups[groupKey] = [];
       }
-      groups[groupKey].push(diag);
+      
+      // Sort dates
+      const sortedDates = diag.allDates.sort();
+      
+      // Create comprehensive summary
+      const summaries = [...diag.allSummaries, ...diag.allNotes].filter(Boolean);
+      const comprehensiveSummary = summaries.length > 0 
+        ? summaries.join(' ') 
+        : `Patient diagnosed with ${diag.diagnosis_description}. ${diag.occurrences.length} occurrence(s) documented in medical records.`;
+      
+      groups[groupKey].push({
+        ...diag,
+        comprehensive_summary: comprehensiveSummary,
+        first_date: sortedDates[0] || 'Unknown',
+        last_date: sortedDates[sortedDates.length - 1] || sortedDates[0] || 'Unknown',
+        occurrence_count: diag.occurrences.length,
+        all_codes: Array.from(diag.allCodes).join(', ') || diag.diagnosis_code,
+        all_doctors: Array.from(diag.allDoctors)
+      });
     });
     
     return groups;
@@ -980,7 +1946,10 @@ function DiagnosisTab({ diagnoses }) {
     <div className="diagnosis-content">
       <h2>Diagnosis Overview</h2>
       <p className="diagnosis-summary">{diagnoses.length} diagnoses grouped into {totalGroups} categories</p>
-      <button className="download-reports-btn">📄 Download All Reports</button>
+      <div className="diagnosis-action-buttons">
+        <button className="download-reports-btn" onClick={downloadDiagnosisPDF}>📄 Download PDF Report</button>
+        <button className="email-broker-btn" onClick={emailToBroker}>📧 Email to Broker</button>
+      </div>
       
       {diagnoses.length > 0 ? (
         <div className="diagnosis-groups-container">
@@ -991,36 +1960,64 @@ function DiagnosisTab({ diagnoses }) {
               </h3>
               <div className="diagnosis-cards">
                 {groupDiagnoses.map((diagnosis, idx) => {
-                  // Count occurrences of this diagnosis
-                  const diagDesc = diagnosis.diagnosis_description;
-                  const occurrenceCount = diagnoses.filter(d => d.diagnosis_description === diagDesc).length;
-                  
                   return (
-                    <div key={idx} className="diagnosis-card">
+                    <div key={idx} className="diagnosis-card diagnosis-card-detailed">
                       <div className="diagnosis-card-header">
                         <div className="diagnosis-title-row">
                           <h4>{diagnosis.diagnosis_description || diagnosis.condition || 'Unknown Diagnosis'}</h4>
                         </div>
-                        <div className="diagnosis-actions">
-                          <span className="star-icon">⭐</span>
+                        <div className="diagnosis-card-meta-top">
+                          <span className="star-icon">☆</span>
                           <span className="time-indicator">7d</span>
                         </div>
                       </div>
-                      <div className="diagnosis-summary-text">
-                        <p>{diagnosis.summary || diagnosis.notes || 'Patient diagnosed with ' + (diagnosis.diagnosis_description || 'condition') + '.'}</p>
+                      
+                      <div className="diagnosis-summary-text-detailed">
+                        <p>{diagnosis.comprehensive_summary || diagnosis.summary || diagnosis.notes || `Patient diagnosed with ${diagnosis.diagnosis_description || 'condition'} documented in patient records.`}</p>
                       </div>
+                      
+                      <div className="diagnosis-metadata-footer">
+                        <div className="metadata-row">
+                          <div className="metadata-item-inline">
+                            <strong>📊 Visits / Reports:</strong>
+                            <span>{diagnosis.occurrence_count || 1}</span>
+                          </div>
+                        </div>
+                        <div className="metadata-row">
+                          <div className="metadata-item-inline">
+                            <strong>📅 First diagnosed:</strong>
+                            <span>{diagnosis.first_date}</span>
+                          </div>
+                        </div>
+                        <div className="metadata-row">
+                          <div className="metadata-item-inline">
+                            <strong>📅 Last diagnosed:</strong>
+                            <span>{diagnosis.last_date}</span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {diagnosis.all_codes && (
+                        <div className="diagnosis-codes-footer">
+                          <span className="diagnosis-code-badge-small">ICD: {diagnosis.all_codes}</span>
+                        </div>
+                      )}
+                      
                       <div className="diagnosis-footer">
-                        <p className="diagnosis-visits">📊 Visits / Reports: {occurrenceCount}</p>
-                        <p className="diagnosis-dates">
-                          📅 First diagnosed: {diagnosis.diagnosed_date || 'January 01, 1901'}<br/>
-                          📅 Last diagnosed: {diagnosis.diagnosed_date || 'January 01, 1901'}
-                        </p>
                         <button 
                           className="view-details-btn"
                           onClick={() => viewDiagnosisDetails(diagnosis, diagnoses)}
                         >
-                          📋 View Full Details
+                          📋 View Full History & Source Documents
                         </button>
+                        {diagnosis.page_id && (
+                          <button 
+                            className="view-page-btn"
+                            onClick={() => viewDiagnosisPage(diagnosis)}
+                          >
+                            📄 View Page
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -1166,6 +2163,160 @@ function MedicinesTab({ medications }) {
   const discontinuedMedications = medications.filter(m => m.status?.toLowerCase() === 'discontinued').length;
   const changedMedications = 0;
 
+  // Group medications by medical specialty
+  const groupMedications = (medList) => {
+    const groups = {};
+    
+    medList.forEach(med => {
+      const medName = (med.medication_name || med.name || '').toLowerCase();
+      const medClass = (med.medication_class || med.class || '').toLowerCase();
+      const reason = (med.reason || med.indication || med.notes || '').toLowerCase();
+      const combined = medName + ' ' + medClass + ' ' + reason;
+      let groupKey = 'Other Medications';
+      
+      // Oncology - Cancer medications, chemotherapy
+      if (combined.includes('chemo') || combined.includes('oncology') ||
+          combined.includes('cancer') || combined.includes('tamoxifen') ||
+          combined.includes('abiraterone') || combined.includes('enzalutamide') ||
+          combined.includes('docetaxel') || combined.includes('cisplatin')) {
+        groupKey = 'Oncology';
+      }
+      // Cardiology - Heart medications
+      else if (combined.includes('statin') || combined.includes('atorvastatin') ||
+               combined.includes('cardiac') || combined.includes('heart') ||
+               combined.includes('beta blocker') || combined.includes('metoprolol') ||
+               combined.includes('carvedilol') || combined.includes('ace inhibitor') ||
+               combined.includes('lisinopril') || combined.includes('enalapril') ||
+               combined.includes('arb') || combined.includes('losartan') ||
+               combined.includes('valsartan') || combined.includes('anticoagulant') ||
+               combined.includes('warfarin') || combined.includes('apixaban') ||
+               combined.includes('aspirin') || combined.includes('clopidogrel') ||
+               combined.includes('digoxin') || combined.includes('amiodarone')) {
+        groupKey = 'Cardiology';
+      }
+      // Endocrinology - Diabetes, thyroid medications
+      else if (combined.includes('insulin') || combined.includes('metformin') ||
+               combined.includes('glipizide') || combined.includes('diabetes') ||
+               combined.includes('thyroid') || combined.includes('levothyroxine') ||
+               combined.includes('synthroid') || combined.includes('glargine') ||
+               combined.includes('liraglutide') || combined.includes('semaglutide')) {
+        groupKey = 'Endocrinology, Diabetes/Metabolism';
+      }
+      // Vascular Surgery - Blood pressure medications
+      else if (combined.includes('hypertension') || combined.includes('blood pressure') ||
+               combined.includes('amlodipine') || combined.includes('hydrochlorothiazide') ||
+               combined.includes('hctz') || combined.includes('calcium channel') ||
+               combined.includes('diuretic') || combined.includes('furosemide') ||
+               combined.includes('clonidine')) {
+        groupKey = 'Vascular Surgery';
+      }
+      // Hematology - Blood/cholesterol medications
+      else if (combined.includes('cholesterol') || combined.includes('lipid') ||
+               combined.includes('rosuvastatin') || combined.includes('pravastatin') ||
+               combined.includes('simvastatin') || combined.includes('fenofibrate') ||
+               combined.includes('ezetimibe') || combined.includes('anemia') ||
+               combined.includes('iron') || combined.includes('b12')) {
+        groupKey = 'Hematology';
+      }
+      // Urology - Prostate, erectile, urinary medications
+      else if (combined.includes('prostate') || combined.includes('tamsulosin') ||
+               combined.includes('finasteride') || combined.includes('dutasteride') ||
+               combined.includes('alpha blocker') || combined.includes('alfuzosin') ||
+               combined.includes('sildenafil') || combined.includes('tadalafil') ||
+               combined.includes('viagra') || combined.includes('cialis') ||
+               combined.includes('erectile') || combined.includes('urinary') ||
+               combined.includes('bladder') || combined.includes('oxybutynin')) {
+        groupKey = 'Urology';
+      }
+      // Gastroenterology - GI medications
+      else if (combined.includes('proton pump') || combined.includes('ppi') ||
+               combined.includes('omeprazole') || combined.includes('pantoprazole') ||
+               combined.includes('esomeprazole') || combined.includes('lansoprazole') ||
+               combined.includes('antacid') || combined.includes('h2 blocker') ||
+               combined.includes('ranitidine') || combined.includes('famotidine') ||
+               combined.includes('laxative') || combined.includes('constipation') ||
+               combined.includes('diarrhea') || combined.includes('ibs')) {
+        groupKey = 'Gastroenterology';
+      }
+      // Pulmonary - Respiratory medications
+      else if (combined.includes('inhaler') || combined.includes('respiratory') ||
+               combined.includes('asthma') || combined.includes('copd') ||
+               combined.includes('albuterol') || combined.includes('bronchodilator') ||
+               combined.includes('steroid inhaler') || combined.includes('fluticasone') ||
+               combined.includes('budesonide') || combined.includes('tiotropium')) {
+        groupKey = 'Pulmonary';
+      }
+      // Neurology - Neurological medications
+      else if (combined.includes('neuropathy') || combined.includes('gabapentin') ||
+               combined.includes('pregabalin') || combined.includes('lyrica') ||
+               combined.includes('seizure') || combined.includes('anticonvulsant') ||
+               combined.includes('migraine') || combined.includes('parkinson') ||
+               combined.includes('levodopa') || combined.includes('dementia')) {
+        groupKey = 'Neurology';
+      }
+      // Orthopaedic Surgery - Pain, inflammation medications
+      else if (combined.includes('nsaid') || combined.includes('ibuprofen') ||
+               combined.includes('naproxen') || combined.includes('celecoxib') ||
+               combined.includes('arthritis') || combined.includes('joint') ||
+               combined.includes('meloxicam') || combined.includes('diclofenac') ||
+               combined.includes('pain') || combined.includes('muscle relaxant')) {
+        groupKey = 'Orthopaedic Surgery';
+      }
+      // Rheumatology - Autoimmune medications
+      else if (combined.includes('rheumat') || combined.includes('methotrexate') ||
+               combined.includes('hydroxychloroquine') || combined.includes('prednisone') ||
+               combined.includes('autoimmune') || combined.includes('lupus') ||
+               combined.includes('biologic')) {
+        groupKey = 'Rheumatology';
+      }
+      // Psychiatry - Mental health medications
+      else if (combined.includes('antidepressant') || combined.includes('ssri') ||
+               combined.includes('snri') || combined.includes('sertraline') ||
+               combined.includes('escitalopram') || combined.includes('fluoxetine') ||
+               combined.includes('anxiety') || combined.includes('depression') ||
+               combined.includes('psychiatric') || combined.includes('antipsychotic') ||
+               combined.includes('benzodiazepine') || combined.includes('lorazepam') ||
+               combined.includes('alprazolam') || combined.includes('sleep') ||
+               combined.includes('zolpidem') || combined.includes('trazodone')) {
+        groupKey = 'Psychiatry';
+      }
+      // Dermatology - Skin medications
+      else if (combined.includes('topical') || combined.includes('cream') ||
+               combined.includes('ointment') || combined.includes('skin') ||
+               combined.includes('dermatology') || combined.includes('rash')) {
+        groupKey = 'Dermatology';
+      }
+      // Infectious Disease - Antibiotics, antivirals
+      else if (combined.includes('antibiotic') || combined.includes('amoxicillin') ||
+               combined.includes('azithromycin') || combined.includes('ciprofloxacin') ||
+               combined.includes('doxycycline') || combined.includes('antiviral') ||
+               combined.includes('infection')) {
+        groupKey = 'Infectious Disease';
+      }
+      // Nephrology - Kidney medications
+      else if (combined.includes('kidney') || combined.includes('renal') ||
+               combined.includes('dialysis') || combined.includes('phosphate binder')) {
+        groupKey = 'Nephrology';
+      }
+      
+      if (!groups[groupKey]) {
+        groups[groupKey] = [];
+      }
+      groups[groupKey].push(med);
+    });
+    
+    // Sort groups alphabetically
+    const sortedGroups = {};
+    Object.keys(groups).sort().forEach(key => {
+      sortedGroups[key] = groups[key];
+    });
+    
+    return sortedGroups;
+  };
+
+  const groupedMedications = groupMedications(medications);
+  const totalGroups = Object.keys(groupedMedications).length;
+
   const viewMedicationPage = async (medication) => {
     if (!medication.page_id) {
       alert('No page information available for this medication');
@@ -1217,7 +2368,7 @@ function MedicinesTab({ medications }) {
   return (
     <div className="medicines-content">
       <h2>Patient Medications Dashboard</h2>
-      <div className="medications-info-message">No diagnoses available for filtering</div>
+      <p className="diagnosis-summary">{totalMedications} medications grouped into {totalGroups} specialties</p>
       
       <div className="medication-stats">
         <div className="stat-box">
@@ -1238,45 +2389,41 @@ function MedicinesTab({ medications }) {
         </div>
       </div>
       
-      <h3>Full Medication List</h3>
       {medications.length > 0 ? (
-        <div className="medications-table-container">
-          <table className="medical-table medications-table">
-            <thead>
-              <tr>
-                <th style={{ width: '40px' }}></th>
-                <th style={{ width: '180px' }}>Medication Name</th>
-                <th style={{ width: '180px' }}>Medication Class</th>
-                <th style={{ width: '100px' }}>Dosage</th>
-                <th style={{ width: '140px' }}>Frequency</th>
-                <th style={{ width: '120px' }}>Route</th>
-                <th style={{ width: '80px' }}>Start Date</th>
-                <th style={{ width: '80px' }}>End Date</th>
-                <th style={{ width: '100px' }}>Status</th>
-                <th style={{ minWidth: '300px' }}>Reason</th>
-                <th style={{ width: '150px' }}>Prescribing Doctor</th>
-                <th style={{ width: '180px' }}>Associated Diagnoses</th>
-              </tr>
-            </thead>
-            <tbody>
-              {medications.map((med, idx) => (
-                <tr key={idx}>
-                  <td>{idx}</td>
-                  <td><strong>{med.medication_name || med.name || 'N/A'}</strong></td>
-                  <td>{med.medication_class || med.class || 'N/A'}</td>
-                  <td>{med.dosage || 'N/A'}</td>
-                  <td>{med.frequency || 'N/A'}</td>
-                  <td>{med.route || 'oral'}</td>
-                  <td>{med.start_date && med.start_date !== 'Unknown' ? med.start_date : 'nan'}</td>
-                  <td>{med.end_date && med.end_date !== 'Unknown' ? med.end_date : 'nan'}</td>
-                  <td><span className={`status-badge ${med.status?.toLowerCase()}`}>{med.status || 'current'}</span></td>
-                  <td className="reason-cell">{med.reason || med.indication || med.notes || 'N/A'}</td>
-                  <td>{med.prescribing_doctor || 'N/A'}</td>
-                  <td>{med.associated_diagnosis || 'N/A'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="diagnosis-groups-container">
+          {Object.entries(groupedMedications).map(([groupName, groupMeds]) => (
+            <div key={groupName} className="diagnosis-group">
+              <h3 className="group-header">
+                {groupName} <span className="group-count">({groupMeds.length})</span>
+              </h3>
+              <div className="medications-table-container">
+                <table className="medical-table medications-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '180px' }}>Medication Name</th>
+                      <th style={{ width: '100px' }}>Dosage</th>
+                      <th style={{ width: '140px' }}>Frequency</th>
+                      <th style={{ width: '100px' }}>Status</th>
+                      <th style={{ width: '80px' }}>Start Date</th>
+                      <th style={{ minWidth: '250px' }}>Reason/Indication</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groupMeds.map((med, idx) => (
+                      <tr key={idx}>
+                        <td><strong>{med.medication_name || med.name || 'N/A'}</strong></td>
+                        <td>{med.dosage || 'N/A'}</td>
+                        <td>{med.frequency || 'N/A'}</td>
+                        <td><span className={`status-badge ${med.status?.toLowerCase()}`}>{med.status || 'current'}</span></td>
+                        <td>{med.start_date && med.start_date !== 'Unknown' ? med.start_date : 'N/A'}</td>
+                        <td className="reason-cell">{med.reason || med.indication || med.notes || 'N/A'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
         </div>
       ) : (
         <div className="no-data-message">No medications found</div>
