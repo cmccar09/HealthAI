@@ -1,0 +1,18 @@
+{
+  "LambdaFunctionConfigurations": [
+    {
+      "LambdaFunctionArn": "arn:aws:lambda:us-east-1:813281204422:function:HealthAI-dev-upload-handler",
+      "Events": ["s3:ObjectCreated:*"],
+      "Filter": {
+        "Key": {
+          "FilterRules": [
+            {
+              "Name": "suffix",
+              "Value": ".pdf"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
