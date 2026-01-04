@@ -51,6 +51,10 @@ DOCUMENTS_TABLE = os.environ['DOCUMENTS_TABLE']
 PROCEDURES_TABLE = os.environ.get('PROCEDURES_TABLE', 'HealthAI-Procedures')
 RADIOLOGY_TABLE = os.environ.get('RADIOLOGY_TABLE', 'HealthAI-Radiology')
 FAMILY_HISTORY_TABLE = os.environ.get('FAMILY_HISTORY_TABLE', 'HealthAI-FamilyHistory')
+REVIEW_QUEUE_TABLE = os.environ.get('REVIEW_QUEUE_TABLE', 'HealthAI-ReviewQueue')
+
+# Confidence threshold for human review (10% = 0.10)
+CONFIDENCE_THRESHOLD = 0.10
 
 # Ultra-efficient system prompt with caching
 MEDINGEST_SYSTEM_PROMPT = """You are an expert medical professional and clinical data specialist. Your role is to thoroughly review patient medical histories and extract comprehensive clinical information with precision.
@@ -101,6 +105,14 @@ def lambda_handler(event, context):
         try:
             # Extract ALL data in one call (5x faster, 80% cheaper)
             extracted_data = extract_comprehensive_data(base64_image, page_number)
+            
+            # Check confidence score and flag for review if below threshold
+            confidence = extracted_data.get('_confidence', 1.0)
+            print(f"[DOC:{document_id}] Page {page_number} extraction confidence: {confidence:.2%}")
+            
+            if confidence < CONFIDENCE_THRESHOLD:
+                print(f"[DOC:{document_id}] LOW CONFIDENCE ({confidence:.2%}) - Flagging for human review")
+                flag_for_review(page_id, document_id, page_number, extracted_data, confidence, webp_bucket, webp_key)
             
             # Store page group information if detected
             page_group = extracted_data.get('page_group', {})
@@ -246,6 +258,7 @@ def call_claude(prompt, image_base64):
     """
     Ultra-efficient Claude API call with prompt caching (90% cost reduction).
     Uses cached system prompt across all pages for massive savings.
+    Returns tuple: (result_text, confidence_score)
     """
     
     for attempt in range(MAX_RETRIES):
@@ -290,10 +303,33 @@ def call_claude(prompt, image_base64):
             response_body = json.loads(response['body'].read())
             result_text = response_body['content'][0]['text'].strip()
             
+            # Extract confidence score from stop_reason and usage metadata
+            # Claude doesn't provide per-field confidence, but we can estimate based on:
+            # 1. Response completeness (stop_reason)
+            # 2. Token usage patterns
+            stop_reason = response_body.get('stop_reason', 'end_turn')
+            usage = response_body.get('usage', {})
+            
+            # Calculate confidence based on response quality indicators
+            confidence = 1.0  # Start with high confidence
+            
+            # Reduce confidence if response was cut off
+            if stop_reason == 'max_tokens':
+                confidence = 0.70  # Response was truncated
+                print(f"WARNING: Response truncated (max_tokens), confidence reduced to {confidence}")
+            elif stop_reason == 'stop_sequence':
+                confidence = 0.95  # Normal completion
+            
+            # Check output tokens - very short responses might indicate uncertainty
+            output_tokens = usage.get('output_tokens', 0)
+            if output_tokens < 100:
+                confidence = min(confidence, 0.60)  # Very short response
+                print(f"WARNING: Short response ({output_tokens} tokens), confidence reduced to {confidence}")
+            
             # Small delay after successful call to prevent rate limiting
             time.sleep(0.5)
             
-            print(f"Claude response length: {len(result_text)} chars")
+            print(f"Claude response length: {len(result_text)} chars, confidence: {confidence:.2f}")
             if len(result_text) < 500:
                 print(f"Claude raw response: {result_text}")
             
@@ -308,7 +344,7 @@ def call_claude(prompt, image_base64):
                 result_text = '\n'.join(lines).strip()
                 print(f"Stripped markdown, new length: {len(result_text)} chars")
             
-            return result_text
+            return result_text, confidence
             
         except ClientError as e:
             error_code = e.response.get('Error', {}).get('Code', '')
@@ -339,15 +375,30 @@ def extract_comprehensive_data(image_base64, page_number):
     """
     Extract ALL medical data in a single optimized API call.
     5x faster and 80% cheaper than sequential calls.
+    Returns tuple: (extracted_data, confidence_score)
     """
     
     # First page gets patient data, all pages get medical content
     if page_number == 1:
         prompt = """Extract comprehensive clinical data in this EXACT JSON format:
 
-{"page_group":{"current_page":"","total_pages":"","group_title":""},"patient_data":{"patient_first_name":"","patient_last_name":"","patient_dob":"YYYY-MM-DD","patient_ssn":"","patient_mrn":"","medical_facility":"","gender":"","blood_type":"","email":"","phone_number":"","address_line1":"","city":"","state":"","postal_code":"","country":"","emergency_contact_name":"","emergency_contact_phone":"","allergies":"","document_date":"YYYY-MM-DD"},"categories":[{"name":"Cardiology","reason":""}],"medications":[{"medication_name":"","dosage":"","frequency":"","route":"","start_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","is_current":"yes/no","prescribing_doctor":"","notes":""}],"diagnoses":[{"diagnosis_description":"","diagnosis_code":"","diagnosed_date":"YYYY-MM-DD","is_current":"yes/no","diagnosing_doctor_first_name":"","diagnosing_doctor_last_name":"","diagnosing_doctor_specialty":"","diagnosing_facility_name":"","specialty_relevance":"","notes":""}],"test_results":[{"test_name":"","test_date":"YYYY-MM-DD","result_value":"","result_unit":"","is_abnormal":"yes/no","normal_range_low":"","normal_range_high":"","ordering_doctor":"","notes":""}],"procedures":[{"procedure_name":"","procedure_code":"","procedure_date":"YYYY-MM-DD","performing_doctor_first_name":"","performing_doctor_last_name":"","facility":"","indication":"","outcome":"","complications":"","notes":""}],"radiology":[{"study_type":"","modality":"","body_part":"","exam_date":"YYYY-MM-DD","findings":"","impression":"","radiologist_name":"","facility":"","is_abnormal":"yes/no","notes":""}],"family_history":[{"relationship":"","condition":"","age_at_diagnosis":"","is_deceased":"yes/no","age_at_death":"","cause_of_death":"","notes":""}],"social_history":{"smoking_status":"","alcohol_use":"","drug_use":"","occupation":"","marital_status":"","living_situation":"","exercise_frequency":"","diet_type":"","notes":""},"providers":[{"doctor_first_name":"","doctor_last_name":"","specialty":"","role_in_care":"","facility":"","contact_info":""}]}
+{"page_group":{"current_page":"","total_pages":"","group_title":""},"patient_data":{"patient_first_name":"","patient_last_name":"","patient_dob":"YYYY-MM-DD","patient_ssn":"","patient_mrn":"","medical_facility":"","gender":"","blood_type":"","email":"","phone_number":"","address_line1":"","city":"","state":"","postal_code":"","country":"","emergency_contact_name":"","emergency_contact_phone":"","allergies":"","document_date":"YYYY-MM-DD"},"categories":[{"name":"Cardiology","reason":""}],"medications":[{"medication_name":"","dosage":"","frequency":"","route":"","start_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","is_current":"yes/no","prescribing_doctor":"","notes":"","source_location":""}],"diagnoses":[{"diagnosis_description":"","diagnosis_code":"","diagnosed_date":"YYYY-MM-DD","is_current":"yes/no","diagnosing_doctor_first_name":"","diagnosing_doctor_last_name":"","diagnosing_doctor_specialty":"","diagnosing_facility_name":"","specialty_relevance":"","notes":"","source_location":""}],"test_results":[{"test_name":"","test_date":"YYYY-MM-DD","result_value":"","result_unit":"","is_abnormal":"yes/no","normal_range_low":"","normal_range_high":"","ordering_doctor":"","notes":"","source_location":""}],"procedures":[{"procedure_name":"","procedure_code":"","procedure_date":"YYYY-MM-DD","performing_doctor_first_name":"","performing_doctor_last_name":"","facility":"","indication":"","outcome":"","complications":"","notes":"","source_location":""}],"radiology":[{"study_type":"","modality":"","body_part":"","exam_date":"YYYY-MM-DD","findings":"","impression":"","radiologist_name":"","facility":"","is_abnormal":"yes/no","notes":"","source_location":""}],"family_history":[{"relationship":"","condition":"","age_at_diagnosis":"","is_deceased":"yes/no","age_at_death":"","cause_of_death":"","notes":"","source_location":""}],"social_history":{"smoking_status":"","alcohol_use":"","drug_use":"","occupation":"","marital_status":"","living_situation":"","exercise_frequency":"","diet_type":"","notes":""},"providers":[{"doctor_first_name":"","doctor_last_name":"","specialty":"","role_in_care":"","facility":"","contact_info":""}]}
 
 CRITICAL EXTRACTION RULES:
+
+0. SOURCE CITATIONS - REQUIRED FOR ALL EXTRACTIONS:
+   For EVERY medication, diagnosis, test result, procedure, radiology finding, and family history item you extract:
+   - You MUST specify WHERE on the page you found this information
+   - Use the source_location field to describe the location
+   - Be specific: "Top left header", "Main diagnosis section, third item", "Lab results table, row 5", "Bottom of page under Medications", etc.
+   - Examples:
+     * "Medications section, second item listed"
+     * "Diagnoses card in center of page"
+     * "Lab results table, dated 2023-01-15, fourth row"
+     * "Radiology report findings paragraph, line 3"
+     * "Family history section at bottom right"
+   - This citation allows human reviewers to verify your extraction
+   - NEVER leave source_location empty if you extracted data
 
 0. PAGE GROUPING - DETECT SUB-DOCUMENTS:
    - Look for page numbering like "Page 1 of 5", "1 of 5", "Page X/Y", etc. in headers, footers, or corners
@@ -625,9 +676,23 @@ Categories must use exact names from list above. Empty array [] if page has no m
     else:
         prompt = """Extract clinical data in this EXACT JSON format:
 
-{"page_group":{"current_page":"","total_pages":"","group_title":""},"categories":[{"name":"Cardiology","reason":""}],"medications":[{"medication_name":"","dosage":"","frequency":"","route":"","start_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","is_current":"yes/no","prescribing_doctor":"","notes":""}],"diagnoses":[{"diagnosis_description":"","diagnosis_code":"","diagnosed_date":"YYYY-MM-DD","is_current":"yes/no","diagnosing_doctor_first_name":"","diagnosing_doctor_last_name":"","diagnosing_doctor_specialty":"","diagnosing_facility_name":"","specialty_relevance":"","notes":""}],"test_results":[{"test_name":"","test_date":"YYYY-MM-DD","result_value":"","result_unit":"","is_abnormal":"yes/no","normal_range_low":"","normal_range_high":"","ordering_doctor":"","notes":""}],"procedures":[{"procedure_name":"","procedure_code":"","procedure_date":"YYYY-MM-DD","performing_doctor_first_name":"","performing_doctor_last_name":"","facility":"","indication":"","outcome":"","complications":"","notes":""}],"radiology":[{"study_type":"","modality":"","body_part":"","exam_date":"YYYY-MM-DD","findings":"","impression":"","radiologist_name":"","facility":"","is_abnormal":"yes/no","notes":""}],"family_history":[{"relationship":"","condition":"","age_at_diagnosis":"","is_deceased":"yes/no","age_at_death":"","cause_of_death":"","notes":""}],"social_history":{"smoking_status":"","alcohol_use":"","drug_use":"","occupation":"","marital_status":"","living_situation":"","exercise_frequency":"","diet_type":"","notes":""},"providers":[{"doctor_first_name":"","doctor_last_name":"","specialty":"","role_in_care":"","facility":"","contact_info":""}]}
+{"page_group":{"current_page":"","total_pages":"","group_title":""},"categories":[{"name":"Cardiology","reason":""}],"medications":[{"medication_name":"","dosage":"","frequency":"","route":"","start_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","is_current":"yes/no","prescribing_doctor":"","notes":"","source_location":""}],"diagnoses":[{"diagnosis_description":"","diagnosis_code":"","diagnosed_date":"YYYY-MM-DD","is_current":"yes/no","diagnosing_doctor_first_name":"","diagnosing_doctor_last_name":"","diagnosing_doctor_specialty":"","diagnosing_facility_name":"","specialty_relevance":"","notes":"","source_location":""}],"test_results":[{"test_name":"","test_date":"YYYY-MM-DD","result_value":"","result_unit":"","is_abnormal":"yes/no","normal_range_low":"","normal_range_high":"","ordering_doctor":"","notes":"","source_location":""}],"procedures":[{"procedure_name":"","procedure_code":"","procedure_date":"YYYY-MM-DD","performing_doctor_first_name":"","performing_doctor_last_name":"","facility":"","indication":"","outcome":"","complications":"","notes":"","source_location":""}],"radiology":[{"study_type":"","modality":"","body_part":"","exam_date":"YYYY-MM-DD","findings":"","impression":"","radiologist_name":"","facility":"","is_abnormal":"yes/no","notes":"","source_location":""}],"family_history":[{"relationship":"","condition":"","age_at_diagnosis":"","is_deceased":"yes/no","age_at_death":"","cause_of_death":"","notes":"","source_location":""}],"social_history":{"smoking_status":"","alcohol_use":"","drug_use":"","occupation":"","marital_status":"","living_situation":"","exercise_frequency":"","diet_type":"","notes":""},"providers":[{"doctor_first_name":"","doctor_last_name":"","specialty":"","role_in_care":"","facility":"","contact_info":""}]}
 
 CRITICAL EXTRACTION RULES:
+
+0. SOURCE CITATIONS - REQUIRED FOR ALL EXTRACTIONS:
+   For EVERY medication, diagnosis, test result, procedure, radiology finding, and family history item you extract:
+   - You MUST specify WHERE on the page you found this information
+   - Use the source_location field to describe the location
+   - Be specific: "Top left header", "Main diagnosis section, third item", "Lab results table, row 5", "Bottom of page under Medications", etc.
+   - Examples:
+     * "Medications section, second item listed"
+     * "Diagnoses card in center of page"
+     * "Lab results table, dated 2023-01-15, fourth row"
+     * "Radiology report findings paragraph, line 3"
+     * "Family history section at bottom right"
+   - This citation allows human reviewers to verify your extraction
+   - NEVER leave source_location empty if you extracted data
 
 0. PAGE GROUPING - DETECT SUB-DOCUMENTS:
    - Look for page numbering like "Page 1 of 5", "1 of 5", "Page X/Y", etc. in headers, footers, or corners
@@ -898,9 +963,11 @@ CRITICAL EXTRACTION RULES:
 
 Categories must use exact names from list above. Empty array [] if page has no medical content."""
     
-    result = call_claude(prompt, image_base64)
+    result, confidence = call_claude(prompt, image_base64)
     try:
         parsed = json.loads(result)
+        # Add confidence score to parsed data
+        parsed['_confidence'] = confidence
         return parsed
     except json.JSONDecodeError as e:
         print(f"JSON parse error: {e}, attempting to fix and retry")
@@ -935,6 +1002,7 @@ Categories must use exact names from list above. Empty array [] if page has no m
                 fixed_result = fixed_result[:last_valid]
                 parsed = json.loads(fixed_result)
                 print(f"Successfully recovered JSON after truncation")
+                parsed['_confidence'] = 0.30  # Low confidence due to parse error recovery
                 return parsed
         except:
             pass
@@ -945,7 +1013,8 @@ Categories must use exact names from list above. Empty array [] if page has no m
             'categories': [{'name': 'administrative', 'reason': 'JSON parse error - unable to extract data'}],
             'medications': [],
             'diagnoses': [],
-            'test_results': []
+            'test_results': [],
+            '_confidence': 0.0  # Zero confidence for failed extraction
         }
     except Exception as e:
         print(f"Unexpected error parsing response: {e}")
@@ -953,7 +1022,8 @@ Categories must use exact names from list above. Empty array [] if page has no m
             'categories': [{'name': 'administrative', 'reason': 'Unexpected parse error'}],
             'medications': [],
             'diagnoses': [],
-            'test_results': []
+            'test_results': [],
+            '_confidence': 0.0  # Zero confidence for failed extraction
         }
 
 
@@ -1517,3 +1587,66 @@ def store_social_history(document_id, page_id, social_history):
             'created_timestamp': int(datetime.utcnow().timestamp())
         }
     )
+
+
+def flag_for_review(page_id, document_id, page_number, extracted_data, confidence, webp_bucket, webp_key):
+    """
+    Flag low-confidence extraction for human review.
+    Creates a review queue entry with all extracted data for validation.
+    """
+    
+    review_queue_table = dynamodb.Table(REVIEW_QUEUE_TABLE)
+    
+    review_id = str(uuid.uuid4())
+    
+    # Prepare extracted data summary
+    data_summary = {
+        'medications_count': len(extracted_data.get('medications', [])),
+        'diagnoses_count': len(extracted_data.get('diagnoses', [])),
+        'test_results_count': len(extracted_data.get('test_results', [])),
+        'procedures_count': len(extracted_data.get('procedures', [])),
+        'radiology_count': len(extracted_data.get('radiology', [])),
+        'categories': extracted_data.get('categories', [])
+    }
+    
+    # Store review queue item
+    review_queue_table.put_item(
+        Item={
+            'review_id': review_id,
+            'document_id': document_id,
+            'page_id': page_id,
+            'page_number': page_number,
+            'status': 'PENDING',  # PENDING, IN_REVIEW, APPROVED, REJECTED
+            'confidence_score': Decimal(str(round(confidence, 4))),
+            'webp_bucket': webp_bucket,
+            'webp_key': webp_key,
+            'extracted_data': json.loads(json.dumps(extracted_data), parse_float=Decimal),
+            'data_summary': data_summary,
+            'created_at': Decimal(str(int(datetime.utcnow().timestamp()))),
+            'flagged_reason': f'Low confidence score: {confidence:.2%} (threshold: {CONFIDENCE_THRESHOLD:.0%})',
+            'reviewer_id': None,
+            'reviewed_at': None,
+            'reviewer_notes': None
+        }
+    )
+    
+    print(f"[DOC:{document_id}] Created review queue entry: {review_id}")
+
+
+def update_page_group_info(page_id, page_group):
+    """Update page with sub-document grouping information."""
+    
+    pages_table = dynamodb.Table(PAGES_TABLE)
+    
+    try:
+        pages_table.update_item(
+            Key={'page_id': page_id},
+            UpdateExpression='SET page_group_current = :current, page_group_total = :total, page_group_title = :title',
+            ExpressionAttributeValues={
+                ':current': page_group.get('current_page', ''),
+                ':total': page_group.get('total_pages', ''),
+                ':title': page_group.get('group_title', '')
+            }
+        )
+    except Exception as e:
+        print(f"Error updating page group info: {e}")

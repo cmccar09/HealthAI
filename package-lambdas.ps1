@@ -30,7 +30,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "  Account ID: $AccountId" -ForegroundColor Green
 
-$BucketName = "$ProjectName-$Environment-lambda-code-$AccountId"
+$BucketName = "$ProjectName-$Environment-lambda-code-$AccountId".ToLower()
 
 # Create Lambda code bucket if it doesn't exist
 Write-Host "`nCreating Lambda code bucket: $BucketName" -ForegroundColor Yellow

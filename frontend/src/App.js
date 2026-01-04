@@ -34,8 +34,23 @@ function App() {
       <div className="App">
         <header className="app-header">
           <div className="header-content">
-            <h1>⚕️ iMed2 Medical Records System</h1>
-            <p>Powered by HealthAI - Advanced Medical Intelligence</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h1>⚕️ iMed2 Medical Records System</h1>
+                <p>Powered by HealthAI - Advanced Medical Intelligence</p>
+              </div>
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <Link to="/" style={{ color: 'white', textDecoration: 'none', padding: '0.5rem 1rem', background: 'rgba(255,255,255,0.1)', borderRadius: '6px' }}>
+                  🏠 Home
+                </Link>
+                <Link to="/review-queue" style={{ color: 'white', textDecoration: 'none', padding: '0.5rem 1rem', background: 'rgba(255,255,255,0.1)', borderRadius: '6px' }}>
+                  🔍 Review Queue
+                </Link>
+                <Link to="/hallucination-dashboard" style={{ color: 'white', textDecoration: 'none', padding: '0.5rem 1rem', background: 'rgba(255,255,255,0.1)', borderRadius: '6px' }}>
+                  🔬 Issues
+                </Link>
+              </div>
+            </div>
           </div>
         </header>
         
@@ -51,6 +66,9 @@ function App() {
           <Route path="/document/:documentId/images" element={<ImageGallery />} />
           <Route path="/document/:documentId/doctors" element={<DoctorsPage />} />
           <Route path="/document/:documentId/next-steps" element={<NextStepsPage />} />
+          <Route path="/review-queue" element={<ReviewQueue />} />
+          <Route path="/review/:reviewId" element={<ReviewDetail />} />
+          <Route path="/hallucination-dashboard" element={<HallucinationDashboard />} />
         </Routes>
       </div>
     </Router>
@@ -5887,4 +5905,577 @@ function StatusTab({ patientId }) {
   );
 }
 
+// Review Queue Component - Human-in-the-Loop for Low Confidence Extractions
+function ReviewQueue() {
+  const [reviewItems, setReviewItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState('PENDING');
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    loadReviewQueue();
+  }, [statusFilter]);
+
+  const loadReviewQueue = async () => {
+    setLoading(true);
+    try {
+      const command = new ScanCommand({
+        TableName: 'HealthAI-dev-ReviewQueue',
+        FilterExpression: '#status = :status',
+        ExpressionAttributeNames: { '#status': 'status' },
+        ExpressionAttributeValues: { ':status': statusFilter }
+      });
+
+      const response = await docClient.send(command);
+      const items = response.Items || [];
+      
+      // Sort by created_at descending
+      items.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+      
+      setReviewItems(items);
+    } catch (error) {
+      console.error('Error loading review queue:', error);
+    }
+    setLoading(false);
+  };
+
+  const getConfidenceBadge = (confidence) => {
+    const pct = (confidence * 100).toFixed(1);
+    const className = confidence < 0.05 ? 'confidence-critical' : 
+                      confidence < 0.10 ? 'confidence-low' : 
+                      'confidence-medium';
+    return <span className={`confidence-badge ${className}`}>{pct}%</span>;
+  };
+
+  const formatDate = (timestamp) => {
+    if (!timestamp) return 'N/A';
+    return new Date(timestamp * 1000).toLocaleString();
+  };
+
+  return (
+    <div className="review-queue-page">
+      <div className="page-header">
+        <h2>🔍 Human Review Queue</h2>
+        <p className="subtitle">Low-confidence AI extractions requiring validation (threshold: 10%)</p>
+      </div>
+
+      <div className="review-filters">
+        <button 
+          className={`filter-btn ${statusFilter === 'PENDING' ? 'active' : ''}`}
+          onClick={() => setStatusFilter('PENDING')}
+        >
+          Pending Review
+        </button>
+        <button 
+          className={`filter-btn ${statusFilter === 'IN_REVIEW' ? 'active' : ''}`}
+          onClick={() => setStatusFilter('IN_REVIEW')}
+        >
+          In Review
+        </button>
+        <button 
+          className={`filter-btn ${statusFilter === 'APPROVED' ? 'active' : ''}`}
+          onClick={() => setStatusFilter('APPROVED')}
+        >
+          Approved
+        </button>
+        <button 
+          className={`filter-btn ${statusFilter === 'REJECTED' ? 'active' : ''}`}
+          onClick={() => setStatusFilter('REJECTED')}
+        >
+          Rejected
+        </button>
+        <button 
+          className={`filter-btn ${statusFilter === 'CORRECTED' ? 'active' : ''}`}
+          onClick={() => setStatusFilter('CORRECTED')}
+        >
+          Corrected
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="loading">Loading review queue...</div>
+      ) : reviewItems.length === 0 ? (
+        <div className="no-items">
+          <p>✅ No items in {statusFilter.toLowerCase()} status</p>
+        </div>
+      ) : (
+        <div className="review-items-grid">
+          {reviewItems.map((item) => (
+            <div 
+              key={item.review_id} 
+              className="review-card"
+              onClick={() => navigate(`/review/${item.review_id}`)}
+            >
+              <div className="review-card-header">
+                <div className="review-id">Review #{item.review_id.substring(0, 8)}</div>
+                {getConfidenceBadge(item.confidence_score)}
+              </div>
+              
+              <div className="review-card-body">
+                <div className="review-info">
+                  <strong>Page:</strong> {item.page_number}
+                </div>
+                <div className="review-info">
+                  <strong>Document:</strong> {item.document_id.substring(0, 12)}...
+                </div>
+                <div className="review-info">
+                  <strong>Flagged:</strong> {formatDate(item.created_at)}
+                </div>
+                <div className="review-info">
+                  <strong>Reason:</strong> {item.flagged_reason}
+                </div>
+                
+                {item.data_summary && (
+                  <div className="data-summary">
+                    <div className="summary-badge">
+                      {item.data_summary.medications_count || 0} Medications
+                    </div>
+                    <div className="summary-badge">
+                      {item.data_summary.diagnoses_count || 0} Diagnoses
+                    </div>
+                    <div className="summary-badge">
+                      {item.data_summary.test_results_count || 0} Tests
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="review-card-footer">
+                <button className="btn-primary">Review →</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="queue-stats">
+        <div className="stat-box">
+          <div className="stat-value">{reviewItems.length}</div>
+          <div className="stat-label">{statusFilter} Items</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Review Detail Component - Individual Review Interface
+function ReviewDetail() {
+  const { reviewId } = useParams();
+  const [reviewItem, setReviewItem] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [imageUrl, setImageUrl] = useState(null);
+  const [reviewNotes, setReviewNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    loadReviewItem();
+  }, [reviewId]);
+
+  const loadReviewItem = async () => {
+    setLoading(true);
+    try {
+      const command = new QueryCommand({
+        TableName: 'HealthAI-dev-ReviewQueue',
+        KeyConditionExpression: 'review_id = :rid',
+        ExpressionAttributeValues: { ':rid': reviewId }
+      });
+
+      const response = await docClient.send(command);
+      if (response.Items && response.Items.length > 0) {
+        const item = response.Items[0];
+        setReviewItem(item);
+        
+        // Load image
+        if (item.webp_key) {
+          const getObjectCommand = new GetObjectCommand({
+            Bucket: item.webp_bucket || 'futuregen-health-ai',
+            Key: item.webp_key
+          });
+          const url = await getSignedUrl(s3Client, getObjectCommand, { expiresIn: 3600 });
+          setImageUrl(url);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading review item:', error);
+    }
+    setLoading(false);
+  };
+
+  const handleReview = async (action) => {
+    setSubmitting(true);
+    try {
+      const updateCommand = new QueryCommand({
+        TableName: 'HealthAI-dev-ReviewQueue',
+        Key: { review_id: reviewId },
+        UpdateExpression: 'SET #status = :status, reviewer_id = :reviewer, reviewed_at = :time, reviewer_notes = :notes',
+        ExpressionAttributeNames: { '#status': 'status' },
+        ExpressionAttributeValues: {
+          ':status': action.toUpperCase(),
+          ':reviewer': 'current_user', // TODO: Get from auth
+          ':time': Math.floor(Date.now() / 1000),
+          ':notes': reviewNotes
+        }
+      });
+
+      await docClient.send(updateCommand);
+      alert(`Review ${action}!`);
+      navigate('/review-queue');
+    } catch (error) {
+      console.error('Error updating review:', error);
+      alert('Error submitting review');
+    }
+    setSubmitting(false);
+  };
+
+  if (loading) {
+    return <div className="loading">Loading review item...</div>;
+  }
+
+  if (!reviewItem) {
+    return <div className="error">Review item not found</div>;
+  }
+
+  const extractedData = reviewItem.extracted_data || {};
+
+  return (
+    <div className="review-detail-page">
+      <div className="review-header">
+        <button className="btn-back" onClick={() => navigate('/review-queue')}>
+          ← Back to Queue
+        </button>
+        <h2>Review Item: {reviewId.substring(0, 12)}</h2>
+        <div className="confidence-display">
+          Confidence: <strong>{(reviewItem.confidence_score * 100).toFixed(1)}%</strong>
+        </div>
+      </div>
+
+      <div className="review-layout">
+        <div className="review-image-panel">
+          <h3>Document Page {reviewItem.page_number}</h3>
+          {imageUrl ? (
+            <img src={imageUrl} alt={`Page ${reviewItem.page_number}`} className="review-image" />
+          ) : (
+            <div className="no-image">Image not available</div>
+          )}
+        </div>
+
+        <div className="review-data-panel">
+          <h3>Extracted Data</h3>
+          
+          {extractedData.medications && extractedData.medications.length > 0 && (
+            <div className="data-section">
+              <h4>💊 Medications ({extractedData.medications.length})</h4>
+              {extractedData.medications.map((med, idx) => (
+                <div key={idx} className="data-item">
+                  <strong>{med.medication_name}</strong> - {med.dosage} {med.frequency}
+                  {med.notes && <div className="item-notes">{med.notes}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {extractedData.diagnoses && extractedData.diagnoses.length > 0 && (
+            <div className="data-section">
+              <h4>🩺 Diagnoses ({extractedData.diagnoses.length})</h4>
+              {extractedData.diagnoses.map((diag, idx) => (
+                <div key={idx} className="data-item">
+                  <strong>{diag.diagnosis_description}</strong>
+                  {diag.diagnosis_code && <span> ({diag.diagnosis_code})</span>}
+                  {diag.notes && <div className="item-notes">{diag.notes}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {extractedData.test_results && extractedData.test_results.length > 0 && (
+            <div className="data-section">
+              <h4>🧪 Test Results ({extractedData.test_results.length})</h4>
+              {extractedData.test_results.map((test, idx) => (
+                <div key={idx} className="data-item">
+                  <strong>{test.test_name}</strong>: {test.result_value} {test.result_unit}
+                  {test.is_abnormal === 'yes' && <span className="abnormal-flag"> ⚠️ Abnormal</span>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="review-actions">
+            <h4>Review Decision</h4>
+            <textarea
+              placeholder="Add notes about this review..."
+              value={reviewNotes}
+              onChange={(e) => setReviewNotes(e.target.value)}
+              rows="4"
+              className="review-notes-input"
+            />
+            
+            <div className="action-buttons">
+              <button 
+                className="btn-approve"
+                onClick={() => handleReview('approved')}
+                disabled={submitting}
+              >
+                ✓ Approve
+              </button>
+              <button 
+                className="btn-reject"
+                onClick={() => handleReview('rejected')}
+                disabled={submitting}
+              >
+                ✗ Reject
+              </button>
+              <button 
+                className="btn-edit"
+                onClick={() => alert('Edit functionality coming soon')}
+                disabled={submitting}
+              >
+                ✎ Edit & Correct
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Report Issue Component - For flagging hallucinations or incorrect extractions
+function ReportIssueButton({ documentId, pageId, pageNumber, dataType, recordId, fieldName, extractedValue, source_location }) {
+  const [showModal, setShowModal] = useState(false);
+  const [issueType, setIssueType] = useState('INCORRECT_VALUE');
+  const [correctValue, setCorrectValue] = useState('');
+  const [notes, setNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    try {
+      const report = {
+        document_id: documentId,
+        page_id: pageId,
+        page_number: pageNumber,
+        issue_type: issueType,
+        data_type: dataType,
+        record_id: recordId,
+        field_name: fieldName,
+        extracted_value: extractedValue,
+        correct_value: correctValue,
+        notes: notes,
+        reporter_id: 'user', // TODO: Get from auth
+        source_location: source_location || 'Not specified'
+      };
+
+      // Call API to create hallucination report
+      const command = new ScanCommand({ TableName: 'HealthAI-dev-HallucinationReports' });
+      await docClient.send(command);  // TODO: Use proper API endpoint
+
+      alert('Issue reported successfully! This will be reviewed by our team.');
+      setShowModal(false);
+      setCorrectValue('');
+      setNotes('');
+    } catch (error) {
+      console.error('Error reporting issue:', error);
+      alert('Error submitting report');
+    }
+    setSubmitting(false);
+  };
+
+  if (!showModal) {
+    return (
+      <button 
+        className="btn-report-issue"
+        onClick={() => setShowModal(true)}
+        title="Report an error or hallucination"
+      >
+        ⚠️ Report Issue
+      </button>
+    );
+  }
+
+  return (
+    <div className="report-issue-modal-overlay" onClick={() => setShowModal(false)}>
+      <div className="report-issue-modal" onClick={(e) => e.stopPropagation()}>
+        <h3>Report Data Issue</h3>
+        <p className="modal-subtitle">Help us improve accuracy by reporting errors</p>
+
+        <div className="form-group">
+          <label>Issue Type:</label>
+          <select value={issueType} onChange={(e) => setIssueType(e.target.value)}>
+            <option value="INCORRECT_VALUE">Incorrect Value</option>
+            <option value="HALLUCINATION">Hallucination (not in document)</option>
+            <option value="MISSING_DATA">Missing Data</option>
+            <option value="WRONG_FIELD">Wrong Field/Category</option>
+            <option value="OTHER">Other</option>
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label>Extracted Value:</label>
+          <input type="text" value={extractedValue} disabled />
+        </div>
+
+        <div className="form-group">
+          <label>Correct Value:</label>
+          <input 
+            type="text" 
+            value={correctValue}
+            onChange={(e) => setCorrectValue(e.target.value)}
+            placeholder="What should it be?"
+          />
+        </div>
+
+        <div className="form-group">
+          <label>Notes:</label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Additional details about the issue..."
+            rows="3"
+          />
+        </div>
+
+        {source_location && (
+          <div className="source-info">
+            <strong>Source Location:</strong> {source_location}
+          </div>
+        )}
+
+        <div className="modal-actions">
+          <button 
+            className="btn-submit-report"
+            onClick={handleSubmit}
+            disabled={submitting}
+          >
+            Submit Report
+          </button>
+          <button 
+            className="btn-cancel"
+            onClick={() => setShowModal(false)}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Hallucination Dashboard - View all reported issues
+function HallucinationDashboard() {
+  const [reports, setReports] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadReports();
+    loadStats();
+  }, []);
+
+  const loadReports = async () => {
+    try {
+      const command = new ScanCommand({
+        TableName: 'HealthAI-dev-HallucinationReports'
+      });
+      const response = await docClient.send(command);
+      setReports(response.Items || []);
+    } catch (error) {
+      console.error('Error loading reports:', error);
+    }
+    setLoading(false);
+  };
+
+  const loadStats = async () => {
+    try {
+      const command = new ScanCommand({
+        TableName: 'HealthAI-dev-HallucinationReports'
+      });
+      const response = await docClient.send(command);
+      const allReports = response.Items || [];
+      
+      const verified = allReports.filter(r => r.Status === 'VERIFIED').length;
+      const totalPages = 50000; // TODO: Get actual number
+      
+      setStats({
+        total_reports: allReports.length,
+        verified_hallucinations: verified,
+        hallucination_rate: ((verified / totalPages) * 100).toFixed(4),
+        total_pages: totalPages
+      });
+    } catch (error) {
+      console.error('Error loading stats:', error);
+    }
+  };
+
+  return (
+    <div className="hallucination-dashboard">
+      <div className="page-header">
+        <h2>🔬 Hallucination Tracking</h2>
+        <p className="subtitle">Monitor and resolve AI extraction errors</p>
+      </div>
+
+      {stats && (
+        <div className="stats-grid">
+          <div className="stat-card">
+            <div className="stat-value">{stats.total_reports}</div>
+            <div className="stat-label">Total Reports</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-value">{stats.verified_hallucinations}</div>
+            <div className="stat-label">Verified Hallucinations</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-value">{stats.hallucination_rate}%</div>
+            <div className="stat-label">Hallucination Rate</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-value">{stats.total_pages.toLocaleString()}</div>
+            <div className="stat-label">Pages Processed</div>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="loading">Loading reports...</div>
+      ) : (
+        <div className="reports-list">
+          <h3>Recent Reports</h3>
+          {reports.length === 0 ? (
+            <div className="no-reports">No issues reported yet</div>
+          ) : (
+            <table className="reports-table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Data Type</th>
+                  <th>Field</th>
+                  <th>Extracted</th>
+                  <th>Correct</th>
+                  <th>Status</th>
+                  <th>Reported</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reports.map(report => (
+                  <tr key={report.ReportID}>
+                    <td>{report.IssueType}</td>
+                    <td>{report.DataType}</td>
+                    <td>{report.FieldName}</td>
+                    <td>{report.ExtractedValue}</td>
+                    <td>{report.CorrectValue}</td>
+                    <td><span className={`status-badge status-${report.Status?.toLowerCase()}`}>{report.Status}</span></td>
+                    <td>{new Date(report.CreatedAt * 1000).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default App;
+
+

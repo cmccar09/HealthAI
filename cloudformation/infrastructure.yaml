@@ -15,6 +15,10 @@ Parameters:
     Type: String
     Default: HealthAI
     Description: Project name for resource naming
+  
+  LambdaCodeBucket:
+    Type: String
+    Description: S3 bucket containing Lambda code
 
 Mappings:
   EnvironmentConfig:
@@ -41,7 +45,7 @@ Resources:
   UploadBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub '${ProjectName}-${Environment}-upload-${AWS::AccountId}'
+      BucketName: !Sub 'healthai-${Environment}-upload-${AWS::AccountId}'
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -58,15 +62,6 @@ Resources:
           - Id: DeleteOldVersions
             Status: Enabled
             NoncurrentVersionExpirationInDays: 30
-      NotificationConfiguration:
-        LambdaConfigurations:
-          - Event: s3:ObjectCreated:*
-            Function: !GetAtt UploadHandlerFunction.Arn
-            Filter:
-              S3Key:
-                Rules:
-                  - Name: suffix
-                    Value: .pdf
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -76,7 +71,7 @@ Resources:
   PDFBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub '${ProjectName}-${Environment}-pdf-${AWS::AccountId}'
+      BucketName: !Sub 'healthai-${Environment}-pdf-${AWS::AccountId}'
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -104,7 +99,7 @@ Resources:
   PNGBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub '${ProjectName}-${Environment}-png-${AWS::AccountId}'
+      BucketName: !Sub 'healthai-${Environment}-png-${AWS::AccountId}'
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -126,7 +121,7 @@ Resources:
   WebPBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub '${ProjectName}-${Environment}-webp-${AWS::AccountId}'
+      BucketName: !Sub 'healthai-${Environment}-webp-${AWS::AccountId}'
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -339,6 +334,90 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
+  ReviewQueueTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-${Environment}-ReviewQueue'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: ReviewID
+          AttributeType: S
+        - AttributeName: Status
+          AttributeType: S
+        - AttributeName: CreatedAt
+          AttributeType: N
+        - AttributeName: DocumentID
+          AttributeType: S
+      KeySchema:
+        - AttributeName: ReviewID
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: StatusIndex
+          KeySchema:
+            - AttributeName: Status
+              KeyType: HASH
+            - AttributeName: CreatedAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: DocumentIndex
+          KeySchema:
+            - AttributeName: DocumentID
+              KeyType: HASH
+            - AttributeName: CreatedAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  HallucinationReportsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${ProjectName}-${Environment}-HallucinationReports'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: ReportID
+          AttributeType: S
+        - AttributeName: DocumentID
+          AttributeType: S
+        - AttributeName: CreatedAt
+          AttributeType: N
+        - AttributeName: IssueType
+          AttributeType: S
+      KeySchema:
+        - AttributeName: ReportID
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: DocumentReportsIndex
+          KeySchema:
+            - AttributeName: DocumentID
+              KeyType: HASH
+            - AttributeName: CreatedAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: IssueTypeIndex
+          KeySchema:
+            - AttributeName: IssueType
+              KeyType: HASH
+            - AttributeName: CreatedAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
   # ==========================================
   # SQS Queues
   # ==========================================
@@ -449,9 +528,13 @@ Resources:
                   - !GetAtt TestResultsTable.Arn
                   - !GetAtt CategoriesTable.Arn
                   - !GetAtt NPITable.Arn
+                  - !GetAtt ReviewQueueTable.Arn
+                  - !GetAtt HallucinationReportsTable.Arn
                   - !Sub '${PatientsTable.Arn}/index/*'
                   - !Sub '${DocumentsTable.Arn}/index/*'
                   - !Sub '${NPITable.Arn}/index/*'
+                  - !Sub '${ReviewQueueTable.Arn}/index/*'
+                  - !Sub '${HallucinationReportsTable.Arn}/index/*'
               # SQS Access
               - Effect: Allow
                 Action:
@@ -487,7 +570,7 @@ Resources:
       Timeout: !FindInMap [EnvironmentConfig, !Ref Environment, LambdaTimeout]
       MemorySize: !FindInMap [EnvironmentConfig, !Ref Environment, LambdaMemory]
       Code:
-        S3Bucket: !Sub '${ProjectName}-${Environment}-lambda-code-${AWS::AccountId}'
+        S3Bucket: !Ref LambdaCodeBucket
         S3Key: upload-handler.zip
       Environment:
         Variables:
@@ -518,7 +601,7 @@ Resources:
       Timeout: !FindInMap [EnvironmentConfig, !Ref Environment, LambdaTimeout]
       MemorySize: !FindInMap [EnvironmentConfig, !Ref Environment, LambdaMemory]
       Code:
-        S3Bucket: !Sub '${ProjectName}-${Environment}-lambda-code-${AWS::AccountId}'
+        S3Bucket: !Ref LambdaCodeBucket
         S3Key: pdf-converter.zip
       Environment:
         Variables:
@@ -552,7 +635,7 @@ Resources:
       Timeout: !FindInMap [EnvironmentConfig, !Ref Environment, LambdaTimeout]
       MemorySize: !FindInMap [EnvironmentConfig, !Ref Environment, LambdaMemory]
       Code:
-        S3Bucket: !Sub '${ProjectName}-${Environment}-lambda-code-${AWS::AccountId}'
+        S3Bucket: !Ref LambdaCodeBucket
         S3Key: ai-processor.zip
       Environment:
         Variables:
@@ -564,6 +647,7 @@ Resources:
           TEST_RESULTS_TABLE: !Ref TestResultsTable
           CATEGORIES_TABLE: !Ref CategoriesTable
           NPI_TABLE: !Ref NPITable
+          REVIEW_QUEUE_TABLE: !Ref ReviewQueueTable
           WEBP_BUCKET: !Ref WebPBucket
           ENVIRONMENT: !Ref Environment
       Tags:
@@ -589,7 +673,7 @@ Resources:
       Timeout: 30
       MemorySize: 512
       Code:
-        S3Bucket: !Sub '${ProjectName}-${Environment}-lambda-code-${AWS::AccountId}'
+        S3Bucket: !Ref LambdaCodeBucket
         S3Key: api-handler.zip
       Environment:
         Variables:
@@ -601,6 +685,8 @@ Resources:
           TEST_RESULTS_TABLE: !Ref TestResultsTable
           CATEGORIES_TABLE: !Ref CategoriesTable
           NPI_TABLE: !Ref NPITable
+          REVIEW_QUEUE_TABLE: !Ref ReviewQueueTable
+          HALLUCINATION_REPORTS_TABLE: !Ref HallucinationReportsTable
           UPLOAD_BUCKET: !Ref UploadBucket
           PDF_BUCKET: !Ref PDFBucket
           PNG_BUCKET: !Ref PNGBucket
