@@ -1,0 +1,303 @@
+/* Betting Card - Unified Decision-Making Interface */
+
+.betting-card {
+  max-width: 420px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 16px;
+  padding: 1.5rem;
+  color: white;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Header Section */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+}
+
+.horse-info {
+  flex: 1;
+}
+
+.horse-name {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem 0;
+  color: white;
+}
+
+.race-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+  opacity: 0.95;
+}
+
+.location, .race-time {
+  display: block;
+}
+
+.roi-badge {
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: white;
+  white-space: nowrap;
+}
+
+/* UNIFIED DECISION PANEL - The Key Innovation */
+.decision-panel {
+  background: white;
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+  border: 3px solid;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.panel-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #1f2937;
+  font-weight: 700;
+}
+
+.quality-score {
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  color: white;
+  font-weight: 700;
+  font-size: 1.125rem;
+}
+
+/* Unified Metrics Display */
+.metrics-unified {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+}
+
+.metric-label {
+  font-size: 0.875rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.metric-value {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.metric-value strong {
+  font-size: 1.125rem;
+  color: #1f2937;
+  min-width: 60px;
+  text-align: right;
+}
+
+.metric-value .low-confidence {
+  color: #ef4444;
+}
+
+.stars {
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+/* Clear Action Recommendation */
+.recommendation-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+  color: white;
+  font-weight: 700;
+  font-size: 1.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.rec-icon {
+  font-size: 1.5rem;
+}
+
+/* Recommendation Reason */
+.recommendation-reason {
+  background: #f9fafb;
+  border-radius: 6px;
+  padding: 0.75rem;
+  border-left: 4px solid #6b7280;
+}
+
+.recommendation-reason p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #374151;
+  line-height: 1.5;
+}
+
+/* Betting Details */
+.betting-details {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  backdrop-filter: blur(10px);
+}
+
+.bet-amount {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.bet-amount .label {
+  font-size: 0.875rem;
+  opacity: 0.9;
+}
+
+.bet-amount .value {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.potential-returns {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.return-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.875rem;
+}
+
+.return-row span {
+  opacity: 0.9;
+}
+
+.win-amount {
+  color: #34d399;
+  font-size: 1rem;
+}
+
+.ev-amount {
+  color: #fbbf24;
+  font-size: 1rem;
+}
+
+/* Additional Info */
+.additional-info {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.odds-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.odds-value, .prob-value {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.form-analysis {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  opacity: 0.95;
+  font-style: italic;
+}
+
+.form-analysis strong {
+  font-style: normal;
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+/* Action Button */
+.bet-button {
+  width: 100%;
+  padding: 1rem;
+  border: none;
+  border-radius: 10px;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.bet-button:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+.bet-button:disabled {
+  opacity: 0.6;
+}
+
+.bet-button.strong {
+  background: #10b981;
+}
+
+.bet-button.moderate {
+  background: #f59e0b;
+}
+
+.bet-button.weak {
+  background: #9ca3af;
+}
+
+/* Responsive Design */
+@media (max-width: 480px) {
+  .betting-card {
+    padding: 1rem;
+  }
+
+  .horse-name {
+    font-size: 1.5rem;
+  }
+
+  .metric-value strong {
+    font-size: 1rem;
+  }
+}
