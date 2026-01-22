@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FutureGenAI - Product Roadmap</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 60px 40px;
+            text-align: center;
+        }
+        
+        h1 {
+            font-size: 3em;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .subtitle {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        h2 {
+            color: #667eea;
+            font-size: 2em;
+            margin: 40px 0 20px 0;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        h3 {
+            color: #764ba2;
+            font-size: 1.5em;
+            margin: 30px 0 15px 0;
+            display: flex;
+            align-items: center;
+        }
+        
+        h3::before {
+            content: "▶";
+            margin-right: 10px;
+            color: #667eea;
+        }
+        
+        .app-list {
+            list-style: none;
+            margin: 15px 0 30px 0;
+        }
+        
+        .app-list li {
+            padding: 12px 15px;
+            margin: 8px 0;
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+        
+        .app-list li:hover {
+            background: #e9ecef;
+            transform: translateX(5px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .app-list strong {
+            color: #764ba2;
+            font-weight: 600;
+        }
+        
+        hr {
+            border: none;
+            height: 2px;
+            background: linear-gradient(to right, transparent, #667eea, transparent);
+            margin: 40px 0;
+        }
+        
+        .phase-section {
+            margin: 30px 0;
+            padding: 25px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+        
+        .phase-section h3 {
+            color: #667eea;
+            margin-top: 0;
+        }
+        
+        .phase-section ul {
+            list-style: none;
+            margin: 15px 0 0 0;
+        }
+        
+        .phase-section li {
+            padding: 10px 15px;
+            margin: 8px 0;
+            background: white;
+            border-left: 4px solid #764ba2;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+        
+        .phase-section li:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .phase-1 { border-left-color: #10b981 !important; }
+        .phase-2 { border-left-color: #3b82f6 !important; }
+        .phase-3 { border-left-color: #f59e0b !important; }
+        .phase-4 { border-left-color: #ef4444 !important; }
+        
+        .product-section {
+            margin: 40px 0;
+            padding: 30px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .product-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #10b981;
+        }
+        
+        .product-header.surebet {
+            border-bottom-color: #3b82f6;
+        }
+        
+        .product-logo {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2em;
+            margin-right: 20px;
+        }
+        
+        .product-logo.surebet {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        }
+        
+        .product-title h2 {
+            margin: 0;
+            border: none;
+            padding: 0;
+        }
+        
+        .product-tagline {
+            color: #6b7280;
+            font-size: 1.1em;
+            margin: 5px 0 0 0;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 25px 0;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            border-left: 4px solid #10b981;
+        }
+        
+        .stat-card.surebet {
+            border-left-color: #3b82f6;
+        }
+        
+        .stat-value {
+            font-size: 2em;
+            font-weight: 700;
+            color: #10b981;
+            margin-bottom: 5px;
+        }
+        
+        .stat-value.surebet {
+            color: #3b82f6;
+        }
+        
+        .stat-label {
+            color: #6b7280;
+            font-size: 0.9em;
+        }
+        
+        .benefits-list {
+            list-style: none;
+            margin: 20px 0;
+        }
+        
+        .benefits-list li {
+            padding: 12px 15px 12px 45px;
+            margin: 10px 0;
+            background: #f8f9fa;
+            border-radius: 8px;
+            position: relative;
+        }
+        
+        .benefits-list li::before {
+            content: "✓";
+            position: absolute;
+            left: 15px;
+            font-size: 1.5em;
+            color: #10b981;
+            font-weight: bold;
+        }
+        
+        .benefits-list.surebet li::before {
+            color: #3b82f6;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            padding: 15px 30px;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            margin-top: 20px;
+            transition: transform 0.3s ease;
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+        }
+        
+        .cta-button.surebet {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        }
+        
+        .cta-button.surebet:hover {
+            box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+        }
+        
+        .architecture-diagram {
+            margin: 30px 0;
+            padding: 30px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            overflow-x: auto;
+        }
+        
+        .diagram-title {
+            text-align: center;
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.2em;
+        }
+        
+        .flow-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+            min-height: 200px;
+        }
+        
+        .flow-box {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            text-align: center;
+            min-width: 120px;
+            transition: transform 0.3s ease;
+        }
+        
+        .flow-box:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+        
+        .flow-box.input {
+            background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+            color: white;
+            font-weight: 600;
+        }
+        
+        .flow-box.process {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white;
+            font-weight: 600;
+        }
+        
+        .flow-box.ai {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            font-weight: 600;
+        }
+        
+        .flow-box.output {
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            color: white;
+            font-weight: 600;
+        }
+        
+        .flow-arrow {
+            font-size: 2em;
+            color: #667eea;
+            font-weight: bold;
+        }
+        
+        .tech-stack {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .tech-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .tech-icon {
+            width: 60px;
+            height: 60px;
+            background: white;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8em;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .tech-label {
+            font-size: 0.9em;
+            color: #6b7280;
+            font-weight: 600;
+        }
+
+        footer {
+            background: #2d3748;
+            color: white;
+            text-align: center;
+            padding: 20px;
+            font-size: 0.9em;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2em;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+            
+            header {
+                padding: 40px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>FutureGenAI</h1>
+            <p class="subtitle">Product Roadmap - AI Applications Pipeline</p>
+        </header>
+        
+        <div class="content">
+            <!-- HealthAI Section -->
+            <div class="product-section">
+                <div class="product-header">
+                    <div class="product-logo">🏥</div>
+                    <div class="product-title">
+                        <h2>HealthAI - Medical Document Intelligence</h2>
+                        <p class="product-tagline">Automated Clinical Data Extraction Platform</p>
+                    </div>
+                </div>
+                
+                <p style="font-size: 1.1em; line-height: 1.8; margin-bottom: 25px;">
+                    HealthAI uses Claude 4.5 Sonnet AI to automatically extract structured clinical data from any medical document with <strong>96% physician-validated accuracy</strong> in <strong>2 seconds per page</strong>.
+                </p>
+                
+                <!-- HealthAI Architecture Diagram -->
+                <div class="architecture-diagram">
+                    <div class="diagram-title">🏗️ System Architecture</div>
+                    <div class="flow-container">
+                        <div class="flow-box input">
+                            <div style="font-size: 2em; margin-bottom: 10px;">📄</div>
+                            <div>Drop Medical<br/>Documents</div>
+                        </div>
+                        <div class="flow-arrow">→</div>
+                        <div class="flow-box process">
+                            <div style="font-size: 2em; margin-bottom: 10px;">☁️</div>
+                            <div>AWS Lambda<br/>Processing</div>
+                        </div>
+                        <div class="flow-arrow">→</div>
+                        <div class="flow-box ai">
+                            <div style="font-size: 2em; margin-bottom: 10px;">🤖</div>
+                            <div>Claude 4.5<br/>AI Extraction</div>
+                        </div>
+                        <div class="flow-arrow">→</div>
+                        <div class="flow-box output">
+                            <div style="font-size: 2em; margin-bottom: 10px;">⚛️</div>
+                            <div>React<br/>Dashboard</div>
+                        </div>
+                    </div>
+                    <div class="tech-stack">
+                        <div class="tech-item">
+                            <div class="tech-icon">📦</div>
+                            <div class="tech-label">Amazon S3</div>
+                        </div>
+                        <div class="tech-item">
+                            <div class="tech-icon">🗄️</div>
+                            <div class="tech-label">DynamoDB</div>
+                        </div>
+                        <div class="tech-item">
+                            <div class="tech-icon">🔐</div>
+                            <div class="tech-label">AWS Bedrock</div>
+                        </div>
+                        <div class="tech-item">
+                            <div class="tech-icon">📊</div>
+                            <div class="tech-label">CloudWatch</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">100x</div>
+                        <div class="stat-label">Faster Processing</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">98x</div>
+                        <div class="stat-label">Cost Reduction</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">96%</div>
+                        <div class="stat-label">Accuracy Rate</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">$25B+</div>
+                        <div class="stat-label">Market Opportunity</div>
+                    </div>
+                </div>
+                
+                <h3 style="margin-top: 30px;">Key Benefits</h3>
+                <ul class="benefits-list">
+                    <li><strong>$68B Problem Solved:</strong> Eliminates annual healthcare waste from manual document processing</li>
+                    <li><strong>Instant ROI:</strong> $0.08 vs. $5 cost per page - 98% cost savings</li>
+                    <li><strong>Processing Speed:</strong> 2 seconds vs. 5 minutes per page - 100x faster</li>
+                    <li><strong>Scalable Infrastructure:</strong> Process 1,000+ pages simultaneously</li>
+                    <li><strong>Production Ready:</strong> Processing 50,000+ documents/month with AWS backing</li>
+                    <li><strong>Revenue Pipeline:</strong> $400K ARR in active negotiations</li>
+                </ul>
+                
+                <h3>Market Traction</h3>
+                <ul class="benefits-list">
+                    <li>5 enterprise discovery calls completed</li>
+                    <li>5 pilot agreements in active negotiation</li>
+                    <li>2 LOIs from regional health plans</li>
+                    <li>AWS Bedrock showcase customer for healthcare AI</li>
+                    <li>Board-certified physicians validating accuracy</li>
+                </ul>
+                
+                <a href="https://master.d2u43pjwtpmlz9.amplifyapp.com" target="_blank" class="cta-button">
+                    🚀 View Live Demo
+                </a>
+            </div>
+            
+            <!-- SureBet Section -->
+            <div class="product-section" style="margin-top: 50px;">
+                <div class="product-header surebet">
+                    <div class="product-logo surebet">🏇</div>
+                    <div class="product-title">
+                        <h2>SureBet AI - Intelligent Sports Betting</h2>
+                        <p class="product-tagline">AI-Powered Predictive Betting Analytics</p>
+                    </div>
+                </div>
+                
+                <p style="font-size: 1.1em; line-height: 1.8; margin-bottom: 25px;">
+                    SureBet AI leverages advanced machine learning and real-time data analysis to identify high-probability betting opportunities in horse racing and greyhound racing markets.
+                </p>
+                
+                <!-- SureBet Architecture Diagram -->
+                <div class="architecture-diagram">
+                    <div class="diagram-title">🏗️ System Architecture</div>
+                    <div class="flow-container">
+                        <div class="flow-box input">
+                            <div style="font-size: 2em; margin-bottom: 10px;">🏇</div>
+                            <div>Betfair API<br/>Live Odds</div>
+                        </div>
+                        <div class="flow-arrow">→</div>
+                        <div class="flow-box process">
+                            <div style="font-size: 2em; margin-bottom: 10px;">☁️</div>
+                            <div>AWS Lambda<br/>Data Pipeline</div>
+                        </div>
+                        <div class="flow-arrow">→</div>
+                        <div class="flow-box ai">
+                            <div style="font-size: 2em; margin-bottom: 10px;">🧠</div>
+                            <div>ML Prediction<br/>Engine</div>
+                        </div>
+                        <div class="flow-arrow">→</div>
+                        <div class="flow-box output">
+                            <div style="font-size: 2em; margin-bottom: 10px;">⚛️</div>
+                            <div>React<br/>Live Dashboard</div>
+                        </div>
+                    </div>
+                    <div class="tech-stack">
+                        <div class="tech-item">
+                            <div class="tech-icon">🗄️</div>
+                            <div class="tech-label">DynamoDB</div>
+                        </div>
+                        <div class="tech-item">
+                            <div class="tech-icon">⚡</div>
+                            <div class="tech-label">API Gateway</div>
+                        </div>
+                        <div class="tech-item">
+                            <div class="tech-icon">🔄</div>
+                            <div class="tech-label">EventBridge</div>
+                        </div>
+                        <div class="tech-item">
+                            <div class="tech-icon">📈</div>
+                            <div class="tech-label">Analytics Engine</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-card surebet">
+                        <div class="stat-value surebet">142%</div>
+                        <div class="stat-label">ROI Performance</div>
+                    </div>
+                    <div class="stat-card surebet">
+                        <div class="stat-value surebet">41.7%</div>
+                        <div class="stat-label">Win Rate</div>
+                    </div>
+                    <div class="stat-card surebet">
+                        <div class="stat-value surebet">24/7</div>
+                        <div class="stat-label">Automated Analysis</div>
+                    </div>
+                    <div class="stat-card surebet">
+                        <div class="stat-value surebet">Live</div>
+                        <div class="stat-label">Production System</div>
+                    </div>
+                </div>
+                
+                <h3 style="margin-top: 30px;">Platform Features</h3>
+                <ul class="benefits-list surebet">
+                    <li><strong>Real-Time Odds Analysis:</strong> Continuous monitoring of Betfair exchange odds</li>
+                    <li><strong>Multi-Factor Prediction:</strong> Analyzes form, track conditions, jockey stats, and historical data</li>
+                    <li><strong>Continuous Learning:</strong> AI model improves with every race outcome</li>
+                    <li><strong>Risk Management:</strong> Automated stake sizing and portfolio optimization</li>
+                    <li><strong>Live Dashboard:</strong> Real-time picks, results tracking, and performance analytics</li>
+                    <li><strong>Each-Way Optimization:</strong> Intelligent place betting for consistent returns</li>
+                </ul>
+                
+                <h3>Technical Infrastructure</h3>
+                <ul class="benefits-list surebet">
+                    <li>AWS Lambda serverless architecture for scalability</li>
+                    <li>DynamoDB for high-performance data storage</li>
+                    <li>React frontend with real-time updates</li>
+                    <li>Betfair API integration for live odds</li>
+                    <li>Automated daily workflow with result fetching</li>
+                </ul>
+                
+                <!-- Mobile App Showcase -->
+                <div style="margin: 40px 0; text-align: center;">
+                    <h3 style="margin-bottom: 20px;">📱 Mobile-First Design</h3>
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px; border-radius: 16px; display: inline-block;">
+                        <div style="background: white; border-radius: 24px; padding: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); max-width: 360px; margin: 0 auto;">
+                            <div style="background: #f8f9fa; border-radius: 16px; padding: 20px; margin-bottom: 15px;">
+                                <div style="background: #f59e0b; color: white; padding: 15px; border-radius: 12px; font-weight: bold; text-align: center; margin-bottom: 15px;">
+                                    FAIR - 34/100<br/>
+                                    <span style="font-size: 0.9em; opacity: 0.9;">Proceed with caution - 0.8x stake</span>
+                                </div>
+                                <div style="font-size: 1.5em; font-weight: bold; margin-bottom: 10px; color: #111; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                                    🏇 Heeztheboy
+                                    <span style="background: #10b981; color: white; padding: 4px 12px; border-radius: 6px; font-size: 0.5em; font-weight: 600;">WIN</span>
+                                    <span style="background: #10b981; color: white; padding: 4px 12px; border-radius: 6px; font-size: 0.5em; font-weight: 600;">✓ 7.2% ROI</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                                    <span style="color: #6b7280;">📍 Leicester</span>
+                                    <span style="color: #3b82f6; font-weight: 600;">14:02 GMT</span>
+                                </div>
+                                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 12px; text-align: left;">
+                                    <div style="font-size: 0.9em; margin-bottom: 10px;">💰 RECOMMENDED STAKE</div>
+                                    <div style="font-size: 2.5em; font-weight: bold; margin-bottom: 5px;">€12</div>
+                                    <div style="font-size: 0.85em; opacity: 0.9;">Potential Win: €28</div>
+                                    <div style="font-size: 0.85em; opacity: 0.9; margin-top: 5px;">Expected Value: +€1 (7.2% ROI)</div>
+                                </div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 15px; text-align: center;">
+                                    <div>
+                                        <div style="color: #6b7280; font-size: 0.85em;">Odds</div>
+                                        <div style="font-weight: bold; font-size: 1.2em;">2/1</div>
+                                    </div>
+                                    <div>
+                                        <div style="color: #6b7280; font-size: 0.85em;">Win</div>
+                                        <div style="font-weight: bold; font-size: 1.2em;">32%</div>
+                                    </div>
+                                    <div>
+                                        <div style="color: #6b7280; font-size: 0.85em;">Place</div>
+                                        <div style="font-weight: bold; font-size: 1.2em;">65%</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="color: #6b7280; font-size: 0.85em; text-align: center;">
+                                ✓ Optimized for bettors on the move
+                            </div>
+                        </div>
+                    </div>
+                    <p style="margin-top: 25px; font-size: 1.1em; color: #6b7280; font-weight: 500;">
+                        <strong>Mobile-optimized interface</strong> for real-time betting decisions on the go
+                    </p>
+                </div>
+                
+                <a href="https://main.d2hmpykfsdweob.amplifyapp.com/" target="_blank" class="cta-button surebet">
+                    📊 View Live Platform
+                </a>
+            </div>
+            
+            <hr style="margin: 60px 0;">
+            
+            <h2>AI Applications Pipeline</h2>
+
+            <h3>Healthcare & Medical</h3>
+            <ul class="app-list">
+                <li><strong>AI Radiology & Imaging Analyst</strong> - Automated diagnostic image analysis</li>
+                <li><strong>AI Clinical Decision Support</strong> - Doctor assistant for diagnosis and treatment</li>
+                <li><strong>AI Mental Health Coach</strong> - Therapeutic support and mental wellness monitoring</li>
+            </ul>
+            
+            <h3>Legal & Compliance</h3>
+            <ul class="app-list">
+                <li><strong>AI Contract Reviewer</strong> - Automated contract analysis and risk detection</li>
+                <li><strong>AI Legal Researcher</strong> - Case law and precedent search automation</li>
+                <li><strong>AI Policy Impact Analyst</strong> - Regulatory impact assessment</li>
+                <li><strong>AI Policy Enforcement Agent</strong> - Compliance monitoring and enforcement</li>
+            </ul>
+            
+            <h3>Financial Services</h3>
+            <ul class="app-list">
+                <li><strong>AI Portfolio Manager</strong> - Automated investment management</li>
+                <li><strong>AI CFO Assistant</strong> - Financial planning and analysis automation</li>
+                <li><strong>AI Fraud Detection Officer</strong> - Transaction monitoring and fraud prevention</li>
+                <li><strong>AI Tax Audit Assistant</strong> - Tax compliance and audit automation</li>
+                <li><strong>AI Risk & Compliance Agent</strong> - Risk assessment and regulatory compliance</li>
+                <li><strong>AI Demand & Pricing Forecaster</strong> - Dynamic pricing and demand prediction</li>
+            </ul>
+            
+            <h3>Operations & Logistics</h3>
+            <ul class="app-list">
+                <li><strong>AI Logistics & Route Optimization Manager</strong> - Supply chain efficiency</li>
+                <li><strong>AI Supply Chain Planner</strong> - Inventory and distribution optimization</li>
+                <li><strong>AI Procurement Agent</strong> - Automated purchasing and vendor management</li>
+            </ul>
+            
+            <h3>Human Resources</h3>
+            <ul class="app-list">
+                <li><strong>AI HR Talent Scout</strong> - Recruitment and candidate screening</li>
+                <li><strong>AI Performance Reviewer</strong> - Employee evaluation and feedback automation</li>
+            </ul>
+            
+            <h3>Sales & Marketing</h3>
+            <ul class="app-list">
+                <li><strong>AI Sales Agents</strong> - Automated sales outreach and conversion</li>
+                <li><strong>AI Growth & Pricing Strategist</strong> - Market positioning and revenue optimization</li>
+                <li><strong>AI Brand & Content Engine</strong> - Marketing content generation and brand management</li>
+                <li><strong>AI Customer Support Agent</strong> - Tier 1-2 customer service automation</li>
+            </ul>
+            
+            <h3>Product & Engineering</h3>
+            <ul class="app-list">
+                <li><strong>AI Product Manager</strong> - Product roadmap and feature prioritization</li>
+                <li><strong>AI QA & Testing Agent</strong> - Automated quality assurance and testing</li>
+                <li><strong>AI Code & Systems Optimizer</strong> - Code review and system performance optimization</li>
+                <li><strong>AI Model Auditor</strong> - AI system validation and bias detection</li>
+            </ul>
+            
+            <h3>Education & Assessment</h3>
+            <ul class="app-list">
+                <li><strong>AI State Exam Corrector</strong> - Automated exam grading and evaluation</li>
+                <li><strong>AI Content & Report Generator</strong> - Automated documentation and reporting</li>
+            </ul>
+            
+            <h3>Strategic & Executive</h3>
+            <ul class="app-list">
+                <li><strong>AI Strategy Agent</strong> - Strategic planning and scenario analysis</li>
+                <li><strong>AI Market Intelligence Agent</strong> - Competitive intelligence and market research</li>
+                <li><strong>AI Research Scientist</strong> - Automated literature review and hypothesis generation</li>
+            </ul>
+            
+            <hr>
+            
+            <h2>Launch Priority Framework</h2>
+            
+            <div class="phase-section">
+                <h3>Phase 1 (High-Automation, Immediate ROI)</h3>
+                <ul>
+                    <li class="phase-1">AI Customer Support Agent</li>
+                    <li class="phase-1">AI Contract Reviewer</li>
+                    <li class="phase-1">AI Fraud Detection Officer</li>
+                    <li class="phase-1">AI Content & Report Generator</li>
+                    <li class="phase-1">AI Tax Audit Assistant</li>
+                </ul>
+            </div>
+            
+            <div class="phase-section">
+                <h3>Phase 2 (Human-AI Hybrid, High Value)</h3>
+                <ul>
+                    <li class="phase-2">AI Clinical Decision Support</li>
+                    <li class="phase-2">AI Portfolio Manager</li>
+                    <li class="phase-2">AI Legal Researcher</li>
+                    <li class="phase-2">AI HR Talent Scout</li>
+                    <li class="phase-2">AI Radiology & Imaging Analyst</li>
+                </ul>
+            </div>
+            
+            <div class="phase-section">
+                <h3>Phase 3 (Strategic & Governance)</h3>
+                <ul>
+                    <li class="phase-3">AI Model Auditor</li>
+                    <li class="phase-3">AI Policy Impact Analyst</li>
+                    <li class="phase-3">AI Strategy Agent</li>
+                    <li class="phase-3">AI Risk & Compliance Agent</li>
+                    <li class="phase-3">AI Code & Systems Optimizer</li>
+                </ul>
+            </div>
+            
+            <div class="phase-section">
+                <h3>Phase 4 (Advanced Capabilities)</h3>
+                <ul>
+                    <li class="phase-4">AI Mental Health Coach</li>
+                    <li class="phase-4">AI Research Scientist</li>
+                    <li class="phase-4">AI Product Manager</li>
+                    <li class="phase-4">AI CFO Assistant</li>
+                    <li class="phase-4">AI Market Intelligence Agent</li>
+                </ul>
+            </div>
+        </div>
+        
+        <footer>
+            <p>&copy; 2026 FutureGenAI - Transforming Business with AI Agents</p>
+        </footer>
+    </div>
+</body>
+</html>
